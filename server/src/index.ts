@@ -1,76 +1,148 @@
 import { WebSocket, RawData, WebSocketServer } from 'ws';
 import http from 'http';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuid } from 'uuid';
 
-// Spinning the http server and the WebSocket server.
-const server = http.createServer();
-const wsServer = new WebSocketServer({ server });
-const port = 8000;
-server.listen(port, () => {
-  console.log(`WebSocket server is running on port ${port}`);
+const httpServer = http.createServer();
+const wsServer = new WebSocketServer({ server: httpServer });
+const port = 8082;
+httpServer.listen(port, () => {
+  console.log(`Ancient websocket server started on port: ${port}`);
 });
 
-// I'm maintaining all active connections in this object
-const clients: { [key: string]: WebSocket } = {};
-// I'm maintaining all active users in this object
-const users: { [key: string]: any } = {};
-// The current editor content is maintained here.
-let editorContent = null;
-// User activity history.
-let userActivity: string[] = [];
+const connections: { [connectionId: string]: WebSocket } = {};
+const users: { [username: string]: { connectionId: string | undefined } } = {};
 
-// Event types
-const typesDef = {
-  USER_EVENT: 'userevent',
-  CONTENT_CHANGE: 'contentchange'
-}
+type SyntaxErrorMessage = { type: 'syntax-error', reason: string };
+type UserJoinMessage = { type: 'user::join', username: string };
+type UserRejectedMessage = { type: 'user::rejected', reason: string };
+type UserLeaveMessage = { type: 'user::leave', username: string };
+type UserReconnectedMessage = { type: 'user::reconnected', username: string };
+type UserDisconnectedMessage = { type: 'user::disconnected', username: string };
+type Message = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserLeaveMessage | UserReconnectedMessage | UserDisconnectedMessage;
 
-function broadcastMessage(json: any) {
-  // We are sending the current data to all connected clients
-  const data = JSON.stringify(json);
-  for(let userId in clients) {
-    let client = clients[userId];
-    if(client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  };
-}
-
-function handleMessage(message: RawData, userId: string) {
-  const dataFromClient = JSON.parse(message.toString());
-  const json = { type: dataFromClient.type, data: {} };
-  if (dataFromClient.type === typesDef.USER_EVENT) {
-    users[userId] = dataFromClient;
-    userActivity.push(`${dataFromClient.username} joined to edit the document`);
-    json.data = { users, userActivity };
-  } else if (dataFromClient.type === typesDef.CONTENT_CHANGE) {
-    editorContent = dataFromClient.content;
-    json.data = { editorContent, userActivity };
+function send<T>(username: string, message: T) {
+  const { connectionId } = users[username];
+  if (connectionId === undefined) {
+    throw new Error(`Can not send message to '${username}' as there is no connection available for it.`)
   }
-  broadcastMessage(json);
+  const connection = connections[connectionId];
+  if (connection.readyState !== WebSocket.OPEN) {
+    throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.readyState}'`)
+  }
+  const data = JSON.stringify(message);
+  connection.send(data)
 }
 
-function handleDisconnect(userId: string) {
-    console.log(`${userId} disconnected.`);
-    const json = { type: typesDef.USER_EVENT, data: {} };
-    const username = users[userId]?.username || userId;
-    userActivity.push(`${username} left the document`);
-    json.data = { users, userActivity };
-    delete clients[userId];
-    delete users[userId];
-    broadcastMessage(json);
+function broadcast<T>(message: T, skipUsername?: string) {
+  const data = JSON.stringify(message);
+  Object.entries(users)
+    .filter(([username, {connectionId}]) => skipUsername !== username && connectionId !== undefined)
+    .map(([,{connectionId}]) => connections[connectionId!])
+    .filter(connection => connection.readyState === WebSocket.OPEN)
+    .forEach(connection => connection.send(data))
 }
 
-// A new client connection request received
 wsServer.on('connection', function(connection) {
-  // Generate a unique code for every user
-  const userId = uuidv4();
-  console.log('Recieved a new connection');
+  const connectionId = uuid();
+  let username: string | undefined = undefined;
+  connections[connectionId] = connection;
+  console.info(`connection '${connectionId}' opened.`);
 
-  // Store the new connection and handle messages
-  clients[userId] = connection;
-  console.log(`${userId} connected.`);
-  connection.on('message', (message) => handleMessage(message, userId));
-  // User disconnected
-  connection.on('close', () => handleDisconnect(userId));
+  connection.on('message', (data) => {
+    const tryParse = (data: RawData): Message => {
+      try {
+        return JSON.parse(data.toString());
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          return { type: 'syntax-error', reason: error.message };
+        }
+        return { type: 'syntax-error', reason: 'unknown' };
+      }
+    }
+    const message: Message = tryParse(data);
+    if (!message?.type) {
+      console.error(`received message with unknown format from '${username ?? connectionId}'.`);
+      return;
+    }
+    if (message.type === 'syntax-error') {
+      console.error(`received message with unknown format (${message.reason}) from '${username ?? connectionId}'`)
+      return;
+    }
+    if (message.type === 'user::reconnected' || message.type === 'user::disconnected' || message.type === 'user::rejected') {
+      console.error(`received '${message.type}' message from '${username ?? connectionId}', while this is a message that should only be sent by the server to clients.`);
+      return;
+    }
+
+    const isJoinMessage = message.type === 'user::join';
+    // Normal: Has username && NOT trying to join
+    if (username !== undefined && !isJoinMessage) {
+      if (message.type === 'user::leave') {
+        delete users[username];
+        connection.close();
+        broadcast<Message>({ type: 'user::leave', username });
+        console.info(`'${username}' left.`);
+        username = undefined;
+      } else {
+        onUserMessage(username, message);
+      }
+    // Setup: Does NOT have username && trying to join
+    } else if (username === undefined && isJoinMessage) {
+      if (!message?.username) {
+        console.error(`received join message with unknown format from '${username ?? connectionId}'.`)
+        connection.close();
+        return;
+      }
+      if (users[message.username] === undefined) {
+        username = message.username;
+        users[message.username] = { connectionId };
+        broadcast<Message>({ type: 'user::join', username });
+        console.info(`'${username}' joined from connection '${connectionId}'.`);
+      } else if (users[message.username].connectionId === undefined) {
+        username = message.username;
+        users[message.username].connectionId = connectionId;
+        broadcast<Message>({ type: 'user::reconnected', username });
+        console.info(`'${username}' reconnected from connection '${connectionId}'.`);
+      } else {
+        connection.send(JSON.stringify({ type: 'user::rejected', message: 'username already taken' }));
+        console.info(`'${message.username}' rejected from connection '${connectionId}', since username is already taken.`);
+      }
+    // Weird situations
+    //  - the username is set, but getting a 'trying to join' message
+    //  - the username is not set, but getting a message other than a 'trying to join' message
+    } else {
+      console.error(`connection '${connectionId}' received a message of type '${message.type}', while it is ${username ? '' : 'NOT '}connected to a user`)
+    }
+  });
+
+  connection.on('close', () => {
+    if (username === undefined) {
+      delete connections[connectionId];
+      console.info(`connection '${connectionId}' closed.`);
+    } else {
+      users[username].connectionId = undefined;
+      broadcast<Message>({ type: 'user::disconnected', username });
+      console.info(`'${username}' disconnected.`);
+      username = undefined;
+    }
+  });
 });
+
+// Ancient Logic
+type IncreaseCounterMessage = { type: 'counter::increase', amount: number };
+type SetCounterMessage = { type: 'counter::set', value: number };
+type AncientMessage = Message | IncreaseCounterMessage | SetCounterMessage;
+
+let counter = 0;
+
+function onUserMessage(username: string, message: AncientMessage) {
+  const user = users[username];
+  switch (message?.type) {
+    case 'counter::increase':
+      counter += message.amount;
+      broadcast<AncientMessage>({ type: 'counter::set', value: counter});
+      break;
+    default:
+      console.error(`Received noop message: ${message.type} from ${username}`)
+      return;
+  }
+}
