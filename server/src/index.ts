@@ -62,10 +62,12 @@ wsServer.on('connection', function(connection) {
     const message: Message = tryParse(data);
     if (!message?.type) {
       console.error(`received message with unknown format from '${username ?? connectionId}'.`);
+      connection.close();
       return;
     }
     if (message.type === 'syntax-error') {
-      console.error(`received message with unknown format (${message.reason}) from '${username ?? connectionId}'`)
+      console.error(`received message with unknown format (${message.reason}) from '${username ?? connectionId}'`);
+      connection.close();
       return;
     }
     if (message.type === 'user::reconnected' || message.type === 'user::disconnected' || message.type === 'user::rejected') {
@@ -77,6 +79,10 @@ wsServer.on('connection', function(connection) {
     // Normal: Has username && NOT trying to join
     if (username !== undefined && !isJoinMessage) {
       if (message.type === 'user::leave') {
+        if (message.username !== username) {
+          console.error(`'${username}' is trying to make '${message.username}' leave, which '${username}' is not allowed to do.`);
+          return;
+        }
         delete users[username];
         connection.close();
         broadcast<Message>({ type: 'user::leave', username });
@@ -92,13 +98,23 @@ wsServer.on('connection', function(connection) {
         connection.close();
         return;
       }
+      const sendExistingInformation = () => {
+        Object.entries(users).map(([otherUsername, { connectionId }]) => {
+          connection.send(JSON.stringify({
+            type: connectionId === undefined ? 'user::disconnected' : 'user::reconnected',
+            username: otherUsername
+          }));
+        });
+      };
       if (users[message.username] === undefined) {
         username = message.username;
+        sendExistingInformation();
         users[message.username] = { connectionId };
         broadcast<Message>({ type: 'user::join', username });
         console.info(`'${username}' joined from connection '${connectionId}'.`);
       } else if (users[message.username].connectionId === undefined) {
         username = message.username;
+        sendExistingInformation();
         users[message.username].connectionId = connectionId;
         broadcast<Message>({ type: 'user::reconnected', username });
         console.info(`'${username}' reconnected from connection '${connectionId}'.`);
@@ -128,7 +144,7 @@ wsServer.on('connection', function(connection) {
 });
 
 // Ancient Logic
-type IncreaseCounterMessage = { type: 'counter::increase', amount: number };
+type IncreaseCounterMessage = { type: 'counter::increase' };
 type SetCounterMessage = { type: 'counter::set', value: number };
 type AncientMessage = Message | IncreaseCounterMessage | SetCounterMessage;
 
@@ -137,9 +153,13 @@ let counter = 0;
 function onUserMessage(username: string, message: AncientMessage) {
   const user = users[username];
   switch (message?.type) {
+    case 'counter::set':
+      counter = message.value;
+      broadcast<AncientMessage>(message);
+      break;
     case 'counter::increase':
-      counter += message.amount;
-      broadcast<AncientMessage>({ type: 'counter::set', value: counter});
+      counter += 1;
+      broadcast<AncientMessage>({ type: 'counter::set', value: counter });
       break;
     default:
       console.error(`Received noop message: ${message.type} from ${username}`)
