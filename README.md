@@ -3,7 +3,10 @@ WebSocket Boardgame by [Simon Karman](https://www.simonkarman.nl)
 
 ## Upcoming freatures
 Next in line:
-- make the client use centralized state management tool for the websocket data
+- (in progress) make the client use centralized state management tool for the websocket data
+   - use 'payload' for all messages
+   - make counter slice work with ancient websocket state
+   - remove now unused dependecies in server and client
 - add TypeScript linting to client and server
 - make the clients use the same TypeScript interface definitions as the server
 - separate game logic from generic server logic and make sure that game logic has hooks for onJoin and sendExistingData

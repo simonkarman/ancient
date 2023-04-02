@@ -1,135 +1,89 @@
-import React, { useEffect, useState, Dispatch, SetStateAction } from 'react';
-import useWebSocket, { ReadyState } from 'react-use-websocket';
-import { increment, selectCount } from './app/counterSlice';
+import React, { useState, useEffect, useRef, createContext, useContext, FC, PropsWithChildren } from 'react';
 import { useAppDispatch, useAppSelector } from './app/hooks';
+import { reset, selectUsers } from './app/userSlice';
 
-const WS_URL = 'ws://127.0.0.1:8082';
+type WebSocketContextProps = [string, WebSocket['send']];
+const WebSocketContext = createContext<WebSocketContextProps>(['', () => {}]);
+const useWebSocket = function () { return useContext(WebSocketContext) };
 
-function App() {
-  const count = useAppSelector(selectCount);
+const WebSocketProvider: FC<PropsWithChildren<{
+  username: string,
+  setUnReady: () => void,
+}>> = (props) => {
+  const [connection, setConnection] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const ws = useRef(null as unknown as WebSocket);
   const dispatch = useAppDispatch();
 
+  useEffect(() => {
+    const socket = new WebSocket('ws://127.0.0.1:8082');
+
+    socket.onopen = () => {
+      setConnection('connected');
+      dispatch(reset());
+      socket.send(JSON.stringify({ type: 'user/join', username: props.username }));
+    };
+    socket.onclose = () => {
+      setConnection('disconnected');
+    };
+    socket.onmessage = (message) => {
+      dispatch(JSON.parse(message.data));
+    };
+
+    ws.current = socket;
+
+    return () => {
+      socket.close();
+    };
+  }, [dispatch, props]);
+  return ( 
+    <WebSocketContext.Provider value={[props.username, ws.current?.send.bind(ws.current)]}>
+      {connection === 'connected' && <>
+        {props.children}
+        <button onClick={() => ws.current.send(JSON.stringify({ type: 'user/leave', username: props.username }))}>
+          Leave
+        </button>
+      </>}
+      {connection === 'connecting' && <p>
+        Trying to connect to server as <strong>{props.username}</strong>.
+      </p>}
+      {connection === 'disconnected' && <p>
+        Whoops! Your connection was lost, <strong>{props.username}</strong>.<br/>
+        <button onClick={props.setUnReady}>Leave</button>
+      </p>}
+    </WebSocketContext.Provider>
+  );
+};
+
+export default function App() {
+  const [isReady, setIsReady] = useState(false);
   const [username, setUsername] = useState('');
-  const { lastJsonMessage, readyState } = useWebSocket(WS_URL, {
-    share: true,
-    retryOnError: true,
-    shouldReconnect: () => true,
-  });
-
-  type UserJoinMessage = { type: 'user::join', username: string };
-  type UserLeaveMessage = { type: 'user::leave', username: string };
-  type UserReconnectedMessage = { type: 'user::reconnected', username: string };
-  type UserDisconnectedMessage = { type: 'user::disconnected', username: string };
-  type UserMessage = UserJoinMessage | UserLeaveMessage | UserReconnectedMessage | UserDisconnectedMessage;
-  const createUser = () => ({ isConnected: true });
-  const [users, setUsers] = useState<{ [username: string]: { isConnected: Boolean }}>({});
-  useEffect(() => {
-    if (lastJsonMessage != null) {
-      const { type, username } = lastJsonMessage as UserMessage;
-      setUsers(_users => {
-        const users = { ..._users };
-        console.info('handling', type, 'of', username);
-        switch (type) {
-          case 'user::join':
-            users[username] = createUser();
-            break;
-          case 'user::leave':
-            delete users[username];
-            break;
-          case 'user::reconnected':
-            if (users[username] === undefined) {
-              users[username] = createUser();
-            }
-            users[username].isConnected = true;
-            break;
-          case 'user::disconnected':
-            if (users[username] === undefined) {
-              users[username] = createUser();
-            }
-            users[username].isConnected = false;
-            break;
-        }
-        return users;
-      })
+  return (<>
+    <h1>Ancient</h1>
+    {isReady
+      ? <>
+          <WebSocketProvider username={username} setUnReady={() => setIsReady(false)}>
+            <Ancient />
+          </WebSocketProvider>
+        </>
+      : <div>
+          <p>Please choose an username!</p>
+          <input name="username" onInput={(e) => setUsername((e.target as any).value)} />
+          <button onClick={() => setIsReady(true)}>Join</button>
+        </div>
     }
-  }, [lastJsonMessage, setUsers])
-
-  useEffect(() => {
-    if (readyState === ReadyState.CLOSED || readyState === ReadyState.CLOSING) {
-      setUsername('');
-      setUsers({});
-    }
-  }, [readyState, setUsername, setUsers])
-
-  // TODO: wait with showing content until we get confirmation that our connection id was actually granted to join as this user...
-  return (
-    <div style={{ margin: '10px' }}>
-      <button onClick={() => dispatch(increment())}>Ancient {count}</button>
-      <div style={{float: 'right', padding: '1em', border: 'solid gray 1px' }}>
-        {Object.entries(users).map(([username, { isConnected }]) =>
-          <div key={username} style={{color: isConnected ? 'green' : 'gray'}}>
-            {username} is {isConnected ? 'online' : 'offline'}
-          </div>
-        )}
-      </div>
-      {username
-          ? <ContentSection username={username}/>
-          : <JoinSection onLogin={setUsername}/> }
-    </div>
-  );
+  </>)
 }
 
-function JoinSection({ onLogin: onJoin }: { onLogin: Dispatch<SetStateAction<string>> }) {
-  const [username, setUsername] = useState('');
-  function join() {
-    if(!username.trim()) {
-      return;
-    }
-    onJoin && onJoin(username);
-  }
-  return (
-    <div>
-      <h3>Welcome</h3>
-      <p>Please choose a username:</p>
-      <input name="username" onInput={(e) => setUsername((e.target as any).value)} />
-      <button onClick={() => join()}>Join</button>
-    </div>
-  );
+function Ancient() {
+  const users = useAppSelector(selectUsers);
+  const [username, send] = useWebSocket();
+  return (<>
+    <p>Hello, <strong>{username}</strong></p>
+    <button onClick={() => send('this is not json, omg!')}>Send bad formatted message to server!</button>
+    <ul>
+      {users.map(user =>
+        <li>{user.username} (is {user.isConnected ? 'online' : 'offline'})</li>
+      )}
+      </ul>
+  </>)
 }
-
-function LeaveSection({ username }: { username: string }) {
-  const { sendJsonMessage } = useWebSocket(WS_URL, {
-    share: true,
-    filter: () => false
-  });
-  function leave() {
-    sendJsonMessage({ type: 'user::leave', username })
-  }
-
-  return (
-    <div>
-      <button onClick={() => leave()}>Leave</button>
-    </div>
-  );
-}
-
-function ContentSection({ username }: { username: string }) {
-  const { sendJsonMessage } = useWebSocket(WS_URL, {
-    share: true,
-    filter: () => false
-  });
-  useEffect(() => {
-    sendJsonMessage({
-      type: 'user::join',
-      username,
-    });
-  }, [sendJsonMessage, username]);
-  return (
-    <>
-      <p>Hey, <strong>{username}</strong>!</p>
-      <LeaveSection username={username} />
-    </>
-  );
-}
-
-export default App;
