@@ -1,9 +1,14 @@
 import React, { useEffect, useState, Dispatch, SetStateAction } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
+import { increment, selectCount } from './app/counterSlice';
+import { useAppDispatch, useAppSelector } from './app/hooks';
 
 const WS_URL = 'ws://127.0.0.1:8082';
 
 function App() {
+  const count = useAppSelector(selectCount);
+  const dispatch = useAppDispatch();
+
   const [username, setUsername] = useState('');
   const { lastJsonMessage, readyState } = useWebSocket(WS_URL, {
     share: true,
@@ -59,7 +64,7 @@ function App() {
   // TODO: wait with showing content until we get confirmation that our connection id was actually granted to join as this user...
   return (
     <div style={{ margin: '10px' }}>
-      <h1>Ancient</h1>
+      <button onClick={() => dispatch(increment())}>Ancient {count}</button>
       <div style={{float: 'right', padding: '1em', border: 'solid gray 1px' }}>
         {Object.entries(users).map(([username, { isConnected }]) =>
           <div key={username} style={{color: isConnected ? 'green' : 'gray'}}>
