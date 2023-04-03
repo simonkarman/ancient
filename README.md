@@ -1,17 +1,17 @@
 # Ancient
-WebSocket Boardgame by [Simon Karman](https://www.simonkarman.nl)
+WebSocket board game by [Simon Karman](https://www.simonkarman.nl)
 
-## Upcoming freatures
+## Upcoming features
 Next in line:
 - (in progress) make the client use centralized state management tool for the websocket data
    - use 'payload' for all messages
    - make counter slice work with ancient websocket state
-   - remove now unused dependecies in server and client
+   - remove now unused dependencies in server and client
 - add TypeScript linting to client and server
 - make the clients use the same TypeScript interface definitions as the server
 - separate game logic from generic server logic and make sure that game logic has hooks for onJoin and sendExistingData
 - write websocket integration tests for generic server logic
-- make the server also use a centralized statemagement tool
+- make the server also use a centralized state management tool
 - use HTTPs
 - using credentials from signed JWT for username AND instead of username use a User object to capture more user data
 - show server output via a self updating user table such as k9s output
