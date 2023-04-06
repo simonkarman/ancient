@@ -140,7 +140,7 @@ wsServer.on('connection', function(connection) {
       return;
     // Weird situations
     //  - the username is set, but getting a 'trying to join' message
-    //  - the username is not set, but getting a message other than a 'trying to join' message
+    //  - the username is not set, but getting a message other than a 'trying to join' or 'trying to leave' message
     } else {
       console.error(`[server] connection '${connectionId}' received a message of type '${message.type}', while it is ${username ? '' : 'NOT '}connected to a user`)
     }

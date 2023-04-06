@@ -3,8 +3,6 @@ WebSocket board game by [Simon Karman](https://www.simonkarman.nl)
 
 ## Upcoming features
 Next in line:
-- (in progress) make the client use a centralized state management tool for the websocket data
-   - remove now unused dependencies in server and client
 - write server state to disk on exit, and load server state on startup (+ add option to reset)
 - add TypeScript linting to client and server
 - make the server use the same TypeScript interface definitions as the client
