@@ -1,10 +1,12 @@
 {
-  "name": "server",
-  "version": "1.0.0",
+  "name": "ancient-server",
+  "version": "0.1.0",
   "description": "ancient server",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts"
+    "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts",
+    "precommit": "npm run lint",
+    "lint": "eslint . --ext .ts"
   },
   "author": "Simon Karman",
   "license": "ISC",
@@ -16,6 +18,11 @@
     "@types/node": "^18.15.11",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.4",
+    "@typescript-eslint/eslint-plugin": "^5.57.1",
+    "@typescript-eslint/parser": "^5.57.1",
+    "eslint": "^7.32.0",
+    "eslint-plugin-import": "^2.24.2",
+    "eslint-plugin-jest": "^24.4.2",
     "nodemon": "^2.0.22",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.2"

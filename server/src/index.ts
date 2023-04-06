@@ -21,26 +21,27 @@ type UserReconnectedMessage = { type: 'user/reconnected', payload: { username: s
 type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
 type Message = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserLeaveMessage | UserReconnectedMessage | UserDisconnectedMessage;
 
-function send<T>(username: string, message: T) {
-  const { connectionId } = users[username];
-  if (connectionId === undefined) {
-    throw new Error(`Can not send message to '${username}' as there is no connection available for it.`)
-  }
-  const connection = connections[connectionId];
-  if (connection.readyState !== WebSocket.OPEN) {
-    throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.readyState}'`)
-  }
-  const data = JSON.stringify(message);
-  connection.send(data)
-}
+// function send<T>(username: string, message: T) {
+//   const { connectionId } = users[username];
+//   if (connectionId === undefined) {
+//     throw new Error(`Can not send message to '${username}' as there is no connection available for it.`);
+//   }
+//   const connection = connections[connectionId];
+//   if (connection.readyState !== WebSocket.OPEN) {
+//     throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.readyState}'`);
+//   }
+//   const data = JSON.stringify(message);
+//   connection.send(data);
+// }
 
 function broadcast<T>(message: T, skipUsername?: string) {
   const data = JSON.stringify(message);
   Object.entries(users)
-    .filter(([username, {connectionId}]) => skipUsername !== username && connectionId !== undefined)
-    .map(([,{connectionId}]) => connections[connectionId!])
+    .filter(([username, { connectionId }]) => skipUsername !== username && connectionId !== undefined)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    .map(([, { connectionId }]) => connections[connectionId!])
     .filter(connection => connection.readyState === WebSocket.OPEN)
-    .forEach(connection => connection.send(data))
+    .forEach(connection => connection.send(data));
 }
 
 wsServer.on('connection', function(connection) {
@@ -59,7 +60,7 @@ wsServer.on('connection', function(connection) {
         }
         return { type: 'syntax-error', payload: { reason: 'unknown' } };
       }
-    }
+    };
     const message: Message = tryParse(data);
     if (!message?.type) {
       console.error(`[server] received message with unknown format from '${username ?? connectionId}'.`);
@@ -72,7 +73,8 @@ wsServer.on('connection', function(connection) {
       return;
     }
     if (message.type === 'user/reconnected' || message.type === 'user/disconnected' || message.type === 'user/rejected') {
-      console.error(`[server] received '${message.type}' message from '${username ?? connectionId}', while this is a message that should only be sent by the server to clients.`);
+      console.error(`[server] received '${message.type}' message from '${username ?? connectionId}'` +
+        ', while this is a message that should only be sent by the server to clients.');
       return;
     }
 
@@ -95,18 +97,18 @@ wsServer.on('connection', function(connection) {
     // Setup: Does NOT have username && trying to join
     } else if (username === undefined && isJoinMessage) {
       if (!message?.payload?.username) {
-        console.error(`[server] received join message with unknown format from '${username ?? connectionId}'.`)
+        console.error(`[server] received join message with unknown format from '${username ?? connectionId}'.`);
         connection.close();
         return;
       }
       const sendExistingInformation = () => {
-        Object.entries(users).forEach(([otherUsername, {connectionId}]) => {
+        Object.entries(users).forEach(([otherUsername, { connectionId }]) => {
           const message: UserDisconnectedMessage | UserReconnectedMessage = {
             type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
             payload: {
-              username: otherUsername
+              username: otherUsername,
             },
-          }
+          };
           connection.send(JSON.stringify(message));
         });
         getExistingInformationMessages().forEach(message => {
@@ -115,22 +117,25 @@ wsServer.on('connection', function(connection) {
       };
       if (users[message.payload.username] === undefined) {
         username = message.payload.username;
-        const acceptedMessage: UserAcceptedMessage = {type: 'user/accepted'};
+        const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
         connection.send(JSON.stringify(acceptedMessage));
         sendExistingInformation();
-        users[message.payload.username] = {connectionId};
-        broadcast<Message>({type: 'user/join', payload: {username}});
+        users[message.payload.username] = { connectionId };
+        broadcast<Message>({ type: 'user/join', payload: { username } });
         console.info(`[server] '${username}' joined from connection '${connectionId}'.`);
       } else if (users[message.payload.username].connectionId === undefined) {
         username = message.payload.username;
-        const acceptedMessage: UserAcceptedMessage = {type: 'user/accepted'};
+        const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
         connection.send(JSON.stringify(acceptedMessage));
         sendExistingInformation();
         users[message.payload.username].connectionId = connectionId;
-        broadcast<Message>({type: 'user/reconnected', payload: {username}});
+        broadcast<Message>({ type: 'user/reconnected', payload: { username } });
         console.info(`[server] '${username}' reconnected from connection '${connectionId}'.`);
       } else {
-        const rejectedMessage: UserRejectedMessage = { type: 'user/rejected', payload: { reason: `username ${message.payload.username} was already taken` } };
+        const rejectedMessage: UserRejectedMessage = {
+          type: 'user/rejected',
+          payload: { reason: `username ${message.payload.username} was already taken` },
+        };
         connection.send(JSON.stringify(rejectedMessage));
         console.info(`[server] '${message.payload.username}' rejected from connection '${connectionId}', since username is already taken.`);
       }
@@ -142,7 +147,8 @@ wsServer.on('connection', function(connection) {
     //  - the username is set, but getting a 'trying to join' message
     //  - the username is not set, but getting a message other than a 'trying to join' or 'trying to leave' message
     } else {
-      console.error(`[server] connection '${connectionId}' received a message of type '${message.type}', while it is ${username ? '' : 'NOT '}connected to a user`)
+      console.error(`[server] connection '${connectionId}' received a message of type '${message.type}'`
+        + `, while it is ${username ? '' : 'NOT '}connected to a user`);
     }
   });
 
@@ -167,18 +173,17 @@ type AncientMessage = Message | IncreaseCounterMessage | SetCounterMessage;
 let counter = 0;
 
 function onUserMessage(username: string, message: AncientMessage) {
-  const user = users[username];
   switch (message?.type) {
-    case 'counter/increase':
-      counter += 1;
-      broadcast<AncientMessage>({ type: 'counter/set', payload: { value: counter } });
-      break;
-    default:
-      console.error(`[ancient] received noop message: ${message.type} from ${username}`)
-      return;
+  case 'counter/increase':
+    counter += 1;
+    broadcast<AncientMessage>({ type: 'counter/set', payload: { value: counter } });
+    break;
+  default:
+    console.error(`[ancient] received noop message: ${message.type} from ${username}`);
+    return;
   }
 }
 
 function getExistingInformationMessages(): AncientMessage[] {
-  return [{ type: 'counter/set', payload: { value: counter }}];
+  return [{ type: 'counter/set', payload: { value: counter } }];
 }
