@@ -3,7 +3,6 @@ WebSocket board game by [Simon Karman](https://www.simonkarman.nl)
 
 ## Upcoming features
 Next in line:
-- (in-progress) Add TypeScript linting to client and server
 - Separate game logic from generic server logic and make sure that game logic has hooks for onJoin and sendExistingData
 - Make the server use the same TypeScript interface definitions as the client
 - Allow rejecting new users with a callback (with reason)

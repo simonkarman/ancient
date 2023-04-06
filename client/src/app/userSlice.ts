@@ -11,7 +11,7 @@ const initialState: UserState = {
   isAccepted: false,
   rejectionReason: undefined,
   users: {},
-}
+};
 
 const newUser = () => ({ isConnected: true });
 
@@ -32,7 +32,7 @@ const userSlice = createSlice({
       state.users[action.payload.username] = newUser();
     },
     leave: (state, action: PayloadAction<{ username: string }>) => {
-      delete state.users[action.payload.username]
+      delete state.users[action.payload.username];
     },
     disconnected: (state, action: PayloadAction<{ username: string }>) => {
       const username = action?.payload?.username;
@@ -49,7 +49,7 @@ const userSlice = createSlice({
       state.users[username].isConnected = true;
     },
   },
-})
+});
 
 export const { reset: userReset } = userSlice.actions;
 export const selectIsAccepted = (rootState: RootState) => rootState.user.isAccepted;

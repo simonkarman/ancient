@@ -7,7 +7,7 @@ interface CounterState {
 }
 const initialState: CounterState = {
   value: 0,
-}
+};
 
 const counterSlice = createSlice({
   name: 'counter',
@@ -18,8 +18,8 @@ const counterSlice = createSlice({
       state.value = action.payload.value;
     },
   },
-})
+});
 
-export const { reset: counterReset } = counterSlice.actions
-export const selectCount = (rootState: RootState) => rootState.counter.value
-export default counterSlice.reducer
+export const { reset: counterReset } = counterSlice.actions;
+export const selectCount = (rootState: RootState) => rootState.counter.value;
+export default counterSlice.reducer;

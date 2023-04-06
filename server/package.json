@@ -1,8 +1,8 @@
 {
   "name": "ancient-server",
   "version": "0.1.0",
+  "private": true,
   "description": "ancient server",
-  "main": "index.js",
   "scripts": {
     "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts",
     "precommit": "npm run lint",

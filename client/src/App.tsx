@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, createContext, useContext, FC, PropsWithChildren } from 'react';
-import {counterReset, selectCount} from './app/counterSlice';
+import { counterReset, selectCount } from './app/counterSlice';
 import { useAppDispatch, useAppSelector } from './app/hooks';
-import {userReset, selectIsAccepted, selectIsRejected, selectRejectionReason, selectUsers} from './app/userSlice';
+import { userReset, selectIsAccepted, selectIsRejected, selectRejectionReason, selectUsers } from './app/userSlice';
 
 type WebSocketContextProps = [string, WebSocket['send']];
 const WebSocketContext = createContext<WebSocketContextProps>(['', () => {}]);
-const useWebSocket = function () { return useContext(WebSocketContext) };
+const useWebSocket = function () { return useContext(WebSocketContext); };
 
 const WebSocketProvider: FC<PropsWithChildren<{
   username: string,
@@ -43,22 +43,33 @@ const WebSocketProvider: FC<PropsWithChildren<{
   return (
     <WebSocketContext.Provider value={[props.username, ws.current?.send.bind(ws.current)]}>
       {connection === 'connecting' && <p>
-          Trying to connect to server as <strong>{props.username}</strong>.
+        {/* eslint-disable-next-line react/jsx-one-expression-per-line */}
+        Trying to connect to server as <strong>{props.username}</strong>.
       </p>}
       {connection === 'connected' && <>
-        {!isAccepted && !isRejected && <p>Waiting on server acceptance or rejection as <strong>{props.username}</strong>.</p>}
+        {!isAccepted && !isRejected && <p>
+          Waiting on server acceptance or rejection as <strong>{props.username}</strong>.
+        </p>}
         {isAccepted && <>
           {props.children}
         </>}
-        {isRejected && <p>Rejected: {rejectionReason}</p>}
+        {isRejected && <p>
+          Server rejected you because of: {rejectionReason}
+        </p>}
         <button onClick={() => {
-          ws.current.send(JSON.stringify({type: 'user/leave', payload: {username: props.username}}));
+          ws.current.send(JSON.stringify({ type: 'user/leave', payload: { username: props.username } }));
         }}>
-            Leave
+          Leave
         </button>
       </>}
       {connection === 'disconnected' && <p>
-        Whoops! Your connection was lost, <strong>{props.username}</strong>.<br/>
+        Whoops! Your connection was lost,
+        {' '}
+        <strong>
+          {props.username}
+        </strong>
+        .
+        <br/>
         <button onClick={props.setUnReady}>Leave</button>
       </p>}
     </WebSocketContext.Provider>
@@ -72,17 +83,17 @@ export default function App() {
     <h1>Ancient</h1>
     {isReady
       ? <>
-          <WebSocketProvider username={username} setUnReady={() => setIsReady(false)}>
-            <Ancient />
-          </WebSocketProvider>
-        </>
+        <WebSocketProvider username={username} setUnReady={() => setIsReady(false)}>
+          <Ancient />
+        </WebSocketProvider>
+      </>
       : <div>
-          <p>Please choose an username!</p>
-          <input name="username" value={username} onInput={(e) => setUsername(e.currentTarget.value)} />
-          <button disabled={username.length < 3} onClick={() => setIsReady(true)}>Join</button>
-        </div>
+        <p>Please choose an username!</p>
+        <input name="username" value={username} onInput={(e) => setUsername(e.currentTarget.value)} />
+        <button disabled={username.length < 3} onClick={() => setIsReady(true)}>Join</button>
+      </div>
     }
-  </>)
+  </>);
 }
 
 function Ancient() {
@@ -92,14 +103,29 @@ function Ancient() {
   return (<>
     <ul style={{ float: 'right' }}>
       {users.map(user =>
-        <li>{user.username} (is {user.isConnected ? 'online' : 'offline'})</li>
+        <li key={user.username}>
+          {user.username}
+          {' '}
+          (is
+          {' '}
+          {user.isConnected ? 'online' : 'offline'}
+          )
+        </li>,
       )}
     </ul>
     <p>
-      Hello, <strong>{username}</strong>
+      Hello,
+      {' '}
+      <strong>
+        {username}
+      </strong>
     </p>
     <p>
-      Count: {count} <button onClick={() => send(JSON.stringify({ type: 'counter/increase' }))}>+</button>
+      Count:
+      {' '}
+      {count}
+      {' '}
+      <button onClick={() => send(JSON.stringify({ type: 'counter/increase' }))}>+</button>
     </p>
-  </>)
+  </>);
 }

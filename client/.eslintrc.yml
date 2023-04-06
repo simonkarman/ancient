@@ -2,14 +2,22 @@ env:
   browser: true
   es2021: true
 extends:
-  - 'eslint:recommended'
-  - 'plugin:@typescript-eslint/recommended'
+  - 'plugin:react/recommended'
 parser: '@typescript-eslint/parser'
 parserOptions:
   ecmaVersion: 12
   sourceType: module
+  ecmaFeatures:
+    jsx: true
 plugins:
+  - react
   - '@typescript-eslint'
+settings:
+  react:
+    version: detect
+  'import/resolver':
+    node:
+      extensions: ['.js', '.jsx', '.d.ts', '.ts', '.tsx']
 rules:
   max-len:
     - error
@@ -76,3 +84,9 @@ rules:
   no-template-curly-in-string: off
   no-new: off
   '@typescript-eslint/no-explicit-any': error
+  'react/jsx-filename-extension':
+    - 1
+    - extensions: ['.tsx', '.jsx']
+  'react/react-in-jsx-scope': off
+  'react/jsx-props-no-spreading': off
+  'react/jsx-one-expression-per-line': off
