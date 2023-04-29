@@ -3,23 +3,23 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 
 interface CounterState {
-  value: number
+  counter: { [username: string] : number };
 }
 const initialState: CounterState = {
-  value: 0,
+  counter: {},
 };
 
 const counterSlice = createSlice({
   name: 'counter',
   initialState,
   reducers: {
-    reset: () => ({ value: 0 }),
-    set: (state, action: PayloadAction<{ value: number }>) => {
-      state.value = action.payload.value;
+    reset: () => ({ counter: {} }),
+    set: (state, action: PayloadAction<{ counter: { [username: string] : number } }>) => {
+      state.counter = action.payload.counter;
     },
   },
 });
 
 export const { reset: counterReset } = counterSlice.actions;
-export const selectCount = (rootState: RootState) => rootState.counter.value;
+export const selectCounter = (rootState: RootState) => rootState.counter.counter;
 export default counterSlice.reducer;

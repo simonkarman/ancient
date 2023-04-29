@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext, FC, PropsWithChildren } from 'react';
-import { counterReset, selectCount } from './app/counterSlice';
+import { counterReset, selectCounter } from './app/counterSlice';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import { userReset, selectIsAccepted, selectIsRejected, selectRejectionReason, selectUsers } from './app/userSlice';
 
@@ -98,7 +98,7 @@ export default function App() {
 
 function Ancient() {
   const users = useAppSelector(selectUsers);
-  const count = useAppSelector(selectCount);
+  const counter = useAppSelector(selectCounter);
   const [username, send] = useWebSocket();
   return (<>
     <ul style={{ float: 'right' }}>
@@ -120,12 +120,10 @@ function Ancient() {
         {username}
       </strong>
     </p>
-    <p>
-      Count:
-      {' '}
-      {count}
-      {' '}
-      <button onClick={() => send(JSON.stringify({ type: 'counter/increase' }))}>+</button>
-    </p>
+    <h2>Counter</h2>
+    {Object.keys(counter).map((key) => (<p key={key}>
+      {key}: {counter[key]}
+    </p>))}
+    <button onClick={() => send(JSON.stringify({ type: 'counter/increase' }))}>+</button>
   </>);
 }
