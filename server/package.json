@@ -11,12 +11,11 @@
   "author": "Simon Karman",
   "license": "ISC",
   "dependencies": {
-    "uuid": "^9.0.0",
+    "short-uuid": "^4.2.2",
     "ws": "^8.13.0"
   },
   "devDependencies": {
     "@types/node": "^18.15.11",
-    "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.4",
     "@typescript-eslint/eslint-plugin": "^5.57.1",
     "@typescript-eslint/parser": "^5.57.1",

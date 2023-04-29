@@ -17,6 +17,6 @@ const karmanServer = new KarmanServer<AncientMessage>({
       return;
     }
   },
-  getExistingInformationMessages: () => [{ type: 'counter/set', payload: { value: counter } }],
+  createWelcomeMessages: () => [{ type: 'counter/set', payload: { value: counter } }],
 });
-karmanServer.start();
+karmanServer.start(8082);
