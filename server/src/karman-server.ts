@@ -31,33 +31,56 @@ type KarmanServerLogger = (severity: LogSeverity, message: string) => void;
  */
 export type KarmanServerProps = {
   /**
-   * The port at which the server should start.
-   *
-   * @default When not provided, the server will start at a random available port.
-   */
-  port?: number;
-  /**
    * @default When not provided, it will log (non debug) to the standard console.
    */
   log?: KarmanServerLogger;
 };
 
 type KarmanServerEvents<TMessage> = {
+  /**
+   * This event is emitted every time a user joins the server.
+   *
+   * @param username The username of the user that joined.
+   */
   join: [username: string];
-  welcome: [username: string, addMessage: (message: TMessage) => void];
+
+  /**
+   * This event is emitted every time a user connects to the server. In other words: the first time the users joins, but also everytime that user
+   *  reconnects.
+   * For example: You can use this to send the current state of the server to the client.
+   *
+   * @param username The username of the user that connected.
+   */
+  connect: [username: string];
+
+  /**
+   * This event is emitted every time a user disconnects from the server without intending to leave.
+   *
+   * @param username The username of the user that disconnected.
+   */
+  disconnect: [username: string];
+
+  /**
+   * This event is emitted every time a user leaves the server.
+   *
+   * @param username The username of the user that left.
+   */
   leave: [username: string],
+
+  /**
+   * This event is emitted every time a user sends a message to the server.
+   *
+   * @param username The username of the user that send the message.
+   * @param message The content of the message that the user sent.
+   */
   message: [username: string, message: TMessage]
 }
 
-/**
+/**<KarmanServerEvents<TMessage>>
  * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join and leave.
  */
 export class KarmanServer<TMessage extends { type: string }> extends EventEmitter<KarmanServerEvents<TMessage>> {
-  // Server
   private readonly httpServer: http.Server;
-
-  // Configuration
-  private readonly port: number | undefined;
   private readonly logger: KarmanServerLogger;
 
   // Internal State
@@ -78,7 +101,6 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     const wsServer = new ws.WebSocketServer({ server: this.httpServer });
 
     // Configuration
-    this.port = props?.port;
     this.logger = props?.log || ((severity: LogSeverity, message: string) => {
       severity !== 'debug' && console[severity](`[${severity}] [karman-server] ${message}`);
     });
@@ -189,42 +211,41 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
         send(acceptedMessage);
         // User Welcome Messages
-        Object.entries(this.users).forEach(([username, { connectionId }]) => {
+        Object.entries(this.users).forEach(([otherUsername, { connectionId }]) => {
+          if (otherUsername === username) {
+            return;
+          }
           const message: UserDisconnectedMessage | UserReconnectedMessage = {
             type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
-            payload: { username },
+            payload: { username: otherUsername },
           };
           send(message);
         });
-        // If this is a new joiner, also callback for the new joiner
+        // If this is a new joiner, also emit for the new joiner
         if (isJoin) {
           this.emit('join', username);
         }
-        // Custom Welcome Messages
-        const messages: TMessage[] = [];
-        this.emit('welcome', username, (message: TMessage) => { messages.push(message); });
-        messages.forEach(message => {
-          send(message as Message);
-        });
+        // Emit connect event
+        this.emit('connect', username);
       };
       if (this.users[message.payload.username] === undefined) {
         username = message.payload.username;
         setUsername(message.payload.username);
-        sendWelcomeMessages(true, username);
         this.users[message.payload.username] = { connectionId };
+        sendWelcomeMessages(true, username);
         this.broadcast({ type: 'user/join', payload: { username } });
         this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
       } else if (this.users[message.payload.username].connectionId === undefined) {
         username = message.payload.username;
         setUsername(message.payload.username);
-        sendWelcomeMessages(false, username);
         this.users[message.payload.username].connectionId = connectionId;
+        sendWelcomeMessages(false, username);
         this.broadcast({ type: 'user/reconnected', payload: { username } });
         this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
       } else {
         const rejectedMessage: UserRejectedMessage = {
           type: 'user/rejected',
-          payload: { reason: `username ${message.payload.username} was already taken` },
+          payload: { reason: `username ${message.payload.username} is already taken` },
         };
         send(rejectedMessage);
         this.logger('info', `'${message.payload.username}' rejected from connection '${connectionId}', since username is already taken.`);
@@ -255,13 +276,14 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       this.users[username].connectionId = undefined;
       this.broadcast({ type: 'user/disconnected', payload: { username } });
       this.logger('info', `'${username}' disconnected.`);
+      this.emit('disconnect', username);
     }
   }
 
   /**
    * Starts the server at the specified port number.
    *
-   * @param port The port number at which to start the server.
+   * @param port The port number at which to start the server. When not provided, the server will start at an available port.
    */
   public start(port?: number): void {
     this.httpServer.listen(port, () => {

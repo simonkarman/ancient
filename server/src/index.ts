@@ -6,17 +6,26 @@ type AncientMessage = IncreaseCounterMessage | SetCounterMessage;
 
 const counter: { [username: string] : number } = {};
 const server = new KarmanServer<AncientMessage>();
+
 server.on('join', (username: string) => {
   counter[username] = 0;
   server.broadcast({ type: 'counter/set', payload: { counter } });
 });
+
+server.on('connect', (username: string) => {
+  server.send(username, { type: 'counter/set', payload: { counter } });
+});
+
+server.on('disconnect', (username: string) => {
+  counter[username] += 10;
+  server.broadcast({ type: 'counter/set', payload: { counter } });
+});
+
 server.on('leave', (username: string) => {
   delete counter[username];
   server.broadcast({ type: 'counter/set', payload: { counter } });
 });
-server.on('welcome', (_, addMessage) => {
-  addMessage({ type: 'counter/set', payload: { counter } });
-});
+
 server.on('message', (username: string, message: AncientMessage) => {
   switch (message?.type) {
   case 'counter/increase':
@@ -28,4 +37,5 @@ server.on('message', (username: string, message: AncientMessage) => {
     return;
   }
 });
+
 server.start(8082);
