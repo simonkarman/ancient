@@ -1,6 +1,7 @@
 import ws from 'ws';
 import http from 'http';
 import short from 'short-uuid';
+import { EventEmitter } from './event-emitter';
 
 type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
 type UserJoinMessage = { type: 'user/join', payload: { username: string } };
@@ -26,58 +27,37 @@ type LogSeverity = 'debug' | 'info' | 'warn' | 'error';
 type KarmanServerLogger = (severity: LogSeverity, message: string) => void;
 
 /**
- * Callback that is called every time a user joins the server.
- *
- * @param username The username of the user that joined.
- */
-type OnJoin = (username: string) => void;
-
-/**
- * Callback that is called every time a user leaves the server.
- *
- * @param username The username of the user that left.
- */
-type OnLeave = (username: string) => void;
-
-/**
- * Callback that is called every time a user sends a message to the server.
- *
- * @param username The username of the user that send the message.
- * @param message The content of the message that the user sent.
- */
-type OnMessage<TMessage extends { type: string }> = (username: string, message: TMessage) => void;
-
-/**
- * Callback that should return a list of messages that are sent to a user as it joins and as it reconnects.
- */
-type OnWelcome<TMessage extends { type: string }> = () => TMessage[];
-
-/**
  * The properties that can be passed to the Karman Server as it is created.
  */
-export type KarmanServerProps<TMessage extends { type: string }> = {
-  onJoin?: OnJoin,
-  onWelcome?: OnWelcome<TMessage>,
-  onLeave?: OnLeave,
-  onMessage: OnMessage<TMessage>,
+export type KarmanServerProps = {
+  /**
+   * The port at which the server should start.
+   *
+   * @default When not provided, the server will start at a random available port.
+   */
+  port?: number;
   /**
    * @default When not provided, it will log (non debug) to the standard console.
    */
-  log?: KarmanServerLogger,
+  log?: KarmanServerLogger;
 };
+
+type KarmanServerEvents<TMessage> = {
+  join: [username: string];
+  welcome: [username: string, addMessage: (message: TMessage) => void];
+  leave: [username: string],
+  message: [username: string, message: TMessage]
+}
 
 /**
  * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join and leave.
  */
-export class KarmanServer<TMessage extends { type: string }> {
+export class KarmanServer<TMessage extends { type: string }> extends EventEmitter<KarmanServerEvents<TMessage>> {
   // Server
   private readonly httpServer: http.Server;
 
   // Configuration
-  private readonly onJoin: OnJoin;
-  private readonly onWelcome: OnWelcome<TMessage>;
-  private readonly onLeave: OnLeave;
-  private readonly onMessage: OnMessage<TMessage>;
+  private readonly port: number | undefined;
   private readonly logger: KarmanServerLogger;
 
   // Internal State
@@ -90,17 +70,16 @@ export class KarmanServer<TMessage extends { type: string }> {
    *
    * @param props The properties with which the server should be created.
    */
-  public constructor(props: KarmanServerProps<TMessage>) {
+  public constructor(props?: KarmanServerProps) {
+    super();
+
     // Server
     this.httpServer = http.createServer();
     const wsServer = new ws.WebSocketServer({ server: this.httpServer });
 
     // Configuration
-    this.onJoin = props.onJoin || (() => ({}));
-    this.onLeave = props.onLeave || (() => ({}));
-    this.onMessage = props.onMessage;
-    this.onWelcome = props.onWelcome || (() => []);
-    this.logger = props.log || ((severity: LogSeverity, message: string) => {
+    this.port = props?.port;
+    this.logger = props?.log || ((severity: LogSeverity, message: string) => {
       severity !== 'debug' && console[severity](`[${severity}] [karman-server] ${message}`);
     });
 
@@ -188,14 +167,14 @@ export class KarmanServer<TMessage extends { type: string }> {
           return;
         }
         delete this.users[username];
-        this.onLeave(username);
+        this.emit('leave', username);
         close();
         this.broadcast({ type: 'user/leave', payload: { username } });
         this.logger('info', `'${username}' left.`);
         username = undefined;
         setUsername(undefined);
       } else {
-        this.onMessage(username, message);
+        this.emit('message', username, message);
       }
     // Setup: Does NOT have username && trying to join
     } else if (username === undefined && isJoinMessage) {
@@ -219,10 +198,12 @@ export class KarmanServer<TMessage extends { type: string }> {
         });
         // If this is a new joiner, also callback for the new joiner
         if (isJoin) {
-          this.onJoin(username);
+          this.emit('join', username);
         }
         // Custom Welcome Messages
-        this.onWelcome().forEach(message => {
+        const messages: TMessage[] = [];
+        this.emit('welcome', username, (message: TMessage) => { messages.push(message); });
+        messages.forEach(message => {
           send(message as Message);
         });
       };
