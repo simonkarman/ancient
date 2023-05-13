@@ -6,7 +6,7 @@
   "scripts": {
     "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts",
     "test": "jest --coverage --silent --verbose",
-    "precommit": "npm run lint",
+    "precommit": "npm run lint && npm run test",
     "lint": "eslint . --ext .ts"
   },
   "author": "Simon Karman",
