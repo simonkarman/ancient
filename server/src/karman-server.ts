@@ -38,9 +38,16 @@ export type KarmanServerProps = {
 
 type KarmanServerEvents<TMessage> = {
   /**
-   * This event is emitted every time a user joins the server.
+   * This event is emitted once the server has started and is ready to accept connections.
    *
-   * @param username The username of the user that joined.
+   * @param port The port at which the server started listening.
+   */
+  start: [port: number];
+
+  /**
+   * This event is emitted every time a new user joins the server.
+   *
+   * @param username The username of the new user that joined.
    */
   join: [username: string];
 
@@ -288,7 +295,10 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
   public start(port?: number): void {
     this.httpServer.listen(port, () => {
       const address = this.httpServer.address();
-      this.logger('info', `started on port ${typeof address === 'string' ? address : address?.port}.`);
+      const port = typeof address === 'string' ? address : address?.port;
+      const portNumber = typeof port === 'string' ? -1 : (port || -1);
+      this.logger('info', `started on port ${port}.`);
+      this.emit('start', portNumber);
     });
   }
 
