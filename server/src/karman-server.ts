@@ -3,15 +3,15 @@ import http from 'http';
 import short from 'short-uuid';
 import { EventEmitter } from './event-emitter';
 
-type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
-type UserJoinMessage = { type: 'user/join', payload: { username: string } };
-type UserRejectedMessage = { type: 'user/rejected', payload: { reason: string } };
-type UserAcceptedMessage = { type: 'user/accepted' };
-type UserLeaveMessage = { type: 'user/leave', payload: { username: string } };
-type UserReconnectedMessage = { type: 'user/reconnected', payload: { username: string } };
-type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
-type Message = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserAcceptedMessage | UserLeaveMessage | UserReconnectedMessage
-  | UserDisconnectedMessage;
+export type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
+export type UserJoinMessage = { type: 'user/join', payload: { username: string } };
+export type UserRejectedMessage = { type: 'user/rejected', payload: { reason: string } };
+export type UserAcceptedMessage = { type: 'user/accepted' };
+export type UserLeaveMessage = { type: 'user/leave', payload: { username: string } };
+export type UserReconnectedMessage = { type: 'user/reconnected', payload: { username: string } };
+export type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
+export type KarmanServerMessage = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserAcceptedMessage | UserLeaveMessage
+  | UserReconnectedMessage | UserDisconnectedMessage;
 
 /**
  * The severity of the log message, which can be either 'debug', 'info'. 'warn, 'error'.
@@ -27,7 +27,7 @@ type LogSeverity = 'debug' | 'info' | 'warn' | 'error';
 type KarmanServerLogger = (severity: LogSeverity, message: string) => void;
 
 /**
- * The properties that can be passed to the Karman Server as it is created.
+ * The properties that can be passed to the Karman Server as it is initializing.
  */
 export type KarmanServerProps = {
   /**
@@ -43,6 +43,11 @@ type KarmanServerEvents<TMessage> = {
    * @param port The port at which the server started listening.
    */
   start: [port: number];
+
+  /**
+   * This event is emitted once the server has stopped running.
+   */
+  stop: [];
 
   /**
    * This event is emitted every time a new user joins the server.
@@ -83,12 +88,24 @@ type KarmanServerEvents<TMessage> = {
   message: [username: string, message: TMessage]
 }
 
+/**
+ * The states of a Karman Server.
+ *
+ * @description *initializing*: The server is initializing, but has not yet been started. This allows you to configure callbacks for the server before it starts.
+ * @description *starting*: The start method of the server has been invoked, but the server is not yet running.
+ * @description *running*: The server is running and accepting connections.
+ * @description *stopping*: The stop method of the server has been invoked, but the server has not yet stopped.
+ * @description *stopped*: The server has stopped.
+ */
+type KarmanServerState = 'initializing' | 'starting' | 'running' | 'stopping' | 'stopped';
+
 /**<KarmanServerEvents<TMessage>>
  * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join and leave.
  */
 export class KarmanServer<TMessage extends { type: string }> extends EventEmitter<KarmanServerEvents<TMessage>> {
   private readonly httpServer: http.Server;
   private readonly logger: KarmanServerLogger;
+  private state: KarmanServerState;
 
   // Internal State
   private readonly connections: { [connectionId: string]: ws.WebSocket } = {};
@@ -96,15 +113,21 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
 
   /**
    * Create a new Karman Server.
-   * Note: This does not start the server. To start the server call the `.start(<port>)` method on the created object.
+   * Note: This does not start the server. To start the server call the `.start(<port>)` method on the new object.
    *
-   * @param props The properties with which the server should be created.
+   * @param props The properties with which the server should be initialized.
    */
   public constructor(props?: KarmanServerProps) {
     super();
 
     // Server
     this.httpServer = http.createServer();
+    this.state = 'initializing';
+    this.httpServer.on('close', () => {
+      this.state = 'stopped';
+      this.logger('info', 'server has stopped.');
+      this.emit('stop');
+    });
     const wsServer = new ws.WebSocketServer({ server: this.httpServer });
 
     // Configuration
@@ -116,6 +139,12 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const karmanServer = this;
     wsServer.on('connection', function(connection) {
+      if (karmanServer.state !== 'running') {
+        karmanServer.logger('debug', `an incoming connection was immediately discarded as the server is ${karmanServer.state}.`);
+        connection.close();
+        return;
+      }
+
       const connectionId = `cn-${short.generate()}`;
       let username: string | undefined = undefined;
       karmanServer.connections[connectionId] = connection;
@@ -128,7 +157,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
           username,
           (_username: string | undefined) => username = _username,
           () => connection.close(),
-          (message: Message) => connection.send(JSON.stringify(message)),
+          (message: KarmanServerMessage) => connection.send(JSON.stringify(message)),
         );
       });
 
@@ -149,9 +178,9 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     username: string | undefined,
     setUsername: (username: string | undefined) => void,
     close: () => void,
-    send: (message: Message) => void,
+    send: (message: KarmanServerMessage) => void,
   ): void {
-    const tryParse = (data: ws.RawData): Message => {
+    const tryParse = (data: ws.RawData): KarmanServerMessage => {
       try {
         return JSON.parse(data.toString());
       } catch (error) {
@@ -161,7 +190,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         return { type: 'syntax-error', payload: { reason: 'unknown' } };
       }
     };
-    const message: Message = tryParse(rawData);
+    const message: KarmanServerMessage = tryParse(rawData);
     if (!message?.type) {
       this.logger('warn', 'connection immediately closed, since a message with unknown format '
         + `was received from '${username ?? connectionId}'.`);
@@ -281,7 +310,11 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       this.logger('debug', `connection '${connectionId}' closed.`);
     } else {
       this.users[username].connectionId = undefined;
-      this.broadcast({ type: 'user/disconnected', payload: { username } });
+      try {
+        this.broadcast({ type: 'user/disconnected', payload: { username } });
+      } catch (e) {
+        this.logger('debug', `broadcasting failed while '${username}' disconnected, due too ${e}.`);
+      }
       this.logger('info', `'${username}' disconnected.`);
       this.emit('disconnect', username);
     }
@@ -293,13 +326,38 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    * @param port The port number at which to start the server. When not provided, the server will start at an available port.
    */
   public start(port?: number): void {
+    if (this.state !== 'initializing') {
+      throw new Error(`Cannot start a ${this.state} server.`);
+    }
+    this.state = 'starting';
     this.httpServer.listen(port, () => {
+      this.state = 'running';
       const address = this.httpServer.address();
       const port = typeof address === 'string' ? address : address?.port;
       const portNumber = typeof port === 'string' ? -1 : (port || -1);
       this.logger('info', `started on port ${port}.`);
       this.emit('start', portNumber);
     });
+  }
+
+  /**
+   * Stops the server.
+   */
+  public stop() {
+    if (this.state !== 'starting' && this.state !== 'running') {
+      throw new Error(`Cannot stop a ${this.state} server.`);
+    }
+    this.state = 'stopping';
+    this.logger('info', 'server is stopping.');
+    this.httpServer.close();
+    this.httpServer.closeAllConnections();
+  }
+
+  /**
+   * Get the current status of the server.
+   */
+  public getStatus(): KarmanServerState {
+    return this.state;
   }
 
   /**
@@ -310,7 +368,10 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    *
    * @returns Returns the number of users this message is sent to.
    */
-  public broadcast(message: TMessage | Message, skipUsername?: string): number {
+  public broadcast(message: TMessage | KarmanServerMessage, skipUsername?: string): number {
+    if (this.state !== 'running') {
+      throw new Error('Cannot broadcast a message if the server is not running.');
+    }
     const data = JSON.stringify(message);
     return Object.entries(this.users)
       .filter(([username, { connectionId }]) => skipUsername !== username && connectionId !== undefined)
@@ -330,6 +391,9 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    * @returns Returns whether the message is sent to the client.
    */
   public send(username: string, message: TMessage): boolean {
+    if (this.state !== 'running') {
+      throw new Error('Cannot send a message if the server is not running.');
+    }
     const user = this.users[username];
     if (user === undefined) {
       throw new Error(`Can not send message to '${username}' as there is no user with that username.`);
