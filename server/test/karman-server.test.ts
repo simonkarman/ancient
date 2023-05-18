@@ -239,6 +239,24 @@ describe('Karman Server', () => {
     }),
   );
 
+  it('should inform all clients when a client reconnects',
+    withServer(async({ serverEmit, addClient }) => {
+      const [, simonEmit] = await addClient('simon');
+      const [lisa] = await addClient('lisa');
+      await sleep();
+      lisa.close();
+      await sleep();
+      serverEmit.connect.mockReset();
+      await addClient('lisa');
+      await sleep();
+      expect(serverEmit.connect).toHaveBeenCalledWith('lisa');
+      expect(simonEmit.message).toHaveBeenCalledWith<[UserReconnectedMessage]>({
+        type: 'user/reconnected',
+        payload: { username: 'lisa' },
+      });
+    }),
+  );
+
   it('should not allow sending a message to a user if the server is not running', async () => {
     const karmanServer = new KarmanServer();
     expect(() => karmanServer.send('simon', { type: 'custom/hello' })).toThrow('Cannot send a message if the server is not running.');
@@ -267,9 +285,55 @@ describe('Karman Server', () => {
     }),
   );
 
-  // TODO:
-  //   - should inform all clients when a client reconnects
-  //   - broadcast
-  //   - send
-  //   - ... more ...
+  it('should return the number of users a message was broadcast to',
+    withServer(async ({ server, addClient }) => {
+      const [, mockSimon] = await addClient('simon');
+      const [lisa] = await addClient('lisa');
+      const [, mockMarjolein] = await addClient('marjolein');
+      lisa.close();
+      await sleep();
+      expect(server.broadcast({ type: 'custom/hello' })).toBe(2);
+      await sleep();
+      expect(mockSimon.message).toHaveBeenCalledWith({ type: 'custom/hello' });
+      expect(mockMarjolein.message).toHaveBeenCalledWith({ type: 'custom/hello' });
+    }),
+  );
+
+  (['send', 'broadcast'] as const).forEach(methodName => {
+    it(`should allow ${methodName}ing a message to the newly connected user in the on join and on connect hook`,
+      withServer(async ({ server, addClient }) => {
+        server.on('join', (username: string) => {
+          if (methodName === 'send') {
+            server.send(username, { type: 'custom/welcome-on-join' });
+          } else {
+            server.broadcast({ type: 'custom/welcome-on-join' });
+          }
+        });
+        server.on('connect', (username: string) => {
+          if (methodName === 'send') {
+            server.send(username, { type: 'custom/welcome-on-connect' });
+          } else {
+            server.broadcast({ type: 'custom/welcome-on-connect' });
+          }
+        });
+        const [, mockSimon] = await addClient('simon');
+        await sleep();
+        const numberOfMessages = mockSimon.message.mock.calls.length;
+        expect(mockSimon.message).toHaveBeenNthCalledWith(numberOfMessages - 2, { type: 'custom/welcome-on-join' });
+        expect(mockSimon.message).toHaveBeenNthCalledWith(numberOfMessages - 1, { type: 'custom/welcome-on-connect' });
+      }),
+    );
+  });
+
+  it('should skip broadcasting a message to a user if skipUsername is provided',
+    withServer(async ({ server, addClient }) => {
+      const [, mockSimon] = await addClient('simon');
+      const [, mockLisa] = await addClient('lisa');
+      await sleep();
+      expect(server.broadcast({ type: 'custom/hello' }, 'simon')).toBe(1);
+      await sleep();
+      expect(mockSimon.message).not.toHaveBeenCalledWith({ type: 'custom/hello' });
+      expect(mockLisa.message).toHaveBeenCalledWith({ type: 'custom/hello' });
+    }),
+  );
 });

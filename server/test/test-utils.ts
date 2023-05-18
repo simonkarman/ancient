@@ -2,7 +2,7 @@ import ws from 'ws';
 import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
 
 // eslint-disable-next-line no-process-env
-export const sleep = (ms = Number.parseInt(process.env.DEFAULT_SLEEP_MS ?? '100', 10)) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms = Number.parseInt(process.env.DEFAULT_SLEEP_MS ?? '75', 10)) => new Promise((r) => setTimeout(r, ms));
 
 export interface ServerEmit<TMessage> {
   start: jest.Mock<void, [number]>;
