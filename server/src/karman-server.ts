@@ -12,6 +12,7 @@ export type UserReconnectedMessage = { type: 'user/reconnected', payload: { user
 export type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
 export type KarmanServerMessage = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserAcceptedMessage | UserLeaveMessage
   | UserReconnectedMessage | UserDisconnectedMessage;
+export type UnknownMessage = { type: unknown };
 
 /**
  * The severity of the log message, which can be either 'debug', 'info'. 'warn, 'error'.
@@ -183,20 +184,23 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     const tryParse = (data: ws.RawData): KarmanServerMessage => {
       try {
         return JSON.parse(data.toString());
-      } catch (error) {
-        if (error instanceof SyntaxError) {
-          return { type: 'syntax-error', payload: { reason: error.message } };
-        }
-        return { type: 'syntax-error', payload: { reason: 'unknown' } };
+      } catch (error: unknown) {
+        return {
+          type: 'syntax-error',
+          payload: {
+            reason: (error as SyntaxError).message,
+          },
+        };
       }
     };
-    const message: KarmanServerMessage = tryParse(rawData);
-    if (!message?.type) {
+    const unknownMessage: UnknownMessage = tryParse(rawData);
+    if (!unknownMessage?.type || typeof unknownMessage.type !== 'string') {
       this.logger('warn', 'connection immediately closed, since a message with unknown format '
         + `was received from '${username ?? connectionId}'.`);
       close();
       return;
     }
+    const message = unknownMessage as KarmanServerMessage;
     if (message.type === 'syntax-error') {
       this.logger('warn', `connection immediately closed, since a message with unknown format (${message.payload.reason}) ` +
         `was received from '${username ?? connectionId}'.`);

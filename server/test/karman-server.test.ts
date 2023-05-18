@@ -1,52 +1,6 @@
 import ws from 'ws';
 import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
-
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function stop(server: KarmanServer<KarmanServerMessage>): Promise<void> {
-  return new Promise<void>((resolve) => {
-    server.on('stop', resolve);
-    server.stop();
-  });
-}
-
-async function withRunningServer(callback: (
-  server: KarmanServer<KarmanServerMessage>,
-  withConnectedClient: (username: string) => Promise<ws.WebSocket>
-) => Promise<void>): Promise<void> {
-  const server = new KarmanServer();
-  const port = await new Promise<number>((resolve) => {
-    server.on('start', resolve);
-    server.start();
-  });
-  const clients: ws.WebSocket[] = [];
-  const withConnectedClient = async (username: string) => {
-    const client = new ws.WebSocket(`ws:127.0.0.1:${port}`);
-    clients.push(client);
-    await new Promise<void>((resolve, reject) => {
-      client.on('message', (rawDate) => {
-        try {
-          const message: KarmanServerMessage = JSON.parse(rawDate.toString());
-          if (message.type === 'user/accepted') {
-            resolve();
-          } else if (message.type === 'user/rejected') {
-            reject(message.payload.reason);
-          }
-        } catch (err) {
-          reject(err);
-        }
-      });
-      client.on('open', () => {
-        const userJoinMessage: UserJoinMessage = { type: 'user/join', payload: { username } };
-        client.send(JSON.stringify(userJoinMessage));
-      });
-    });
-    return client;
-  };
-  await callback(server, withConnectedClient);
-  clients.forEach((client) => client.close());
-  await stop(server);
-}
+import { stop, withRunningServer } from './test-utils';
 
 describe('Karman Server', () => {
   test('should emit a start event with the port once the server successfully started', async () => {
@@ -104,5 +58,54 @@ describe('Karman Server', () => {
       await addClient('lisa');
       await expect(addClient('simon')).rejects.toStrictEqual('username simon is already taken');
     });
-  }, 100000);
+  });
+  test('should immediately close a connection to a client if it sends a message with an unknown format', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const messages = ['this-is-not-a-json-message', '{}', '{"type":3}', '{"type":{"key":"value"}}'];
+      await Promise.all(messages.map((message, index) => new Promise<void>((resolve) => {
+        addClient(`simon-${index}`).then(client => {
+          server.on('disconnect', (username: string) => {
+            if (username === `simon-${index}`) {
+              resolve();
+            }
+          });
+          client.send(message);
+        });
+      })));
+    });
+  });
+  test('should immediately close a connection to a client if it sends a server only message', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const messages: KarmanServerMessage[] = [
+        { type: 'user/reconnected', payload: { username: 'any' } },
+        { type: 'user/disconnected', payload: { username: 'any' } },
+        { type: 'user/accepted' },
+        { type: 'user/rejected', payload: { reason: 'any' } },
+      ];
+      await Promise.all(messages.map((message, index) => new Promise<void>((resolve) => {
+        addClient(`simon-${index}`).then(client => {
+          server.on('disconnect', (username: string) => {
+            if (username === `simon-${index}`) {
+              resolve();
+            }
+          });
+          client.send(JSON.stringify(message));
+        });
+      })));
+    });
+  });
+  test('should emmit a message and the sender if it receives a custom message', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const simon = await addClient('simon');
+      const customMessage = { type: 'custom', payload: { key: 'value' } };
+      await new Promise<void>((resolve) => {
+        server.on('message', (username, message) => {
+          expect(username).toStrictEqual('simon');
+          expect(message).toStrictEqual(customMessage);
+          resolve();
+        });
+        simon.send(JSON.stringify(customMessage));
+      });
+    });
+  });
 });
