@@ -1,4 +1,4 @@
-import ws from 'ws';
+import ws, { AddressInfo } from 'ws';
 import http from 'http';
 import short from 'short-uuid';
 import { EventEmitter } from './event-emitter';
@@ -140,6 +140,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const karmanServer = this;
     wsServer.on('connection', function(connection) {
+      /* istanbul ignore if */
       if (karmanServer.state !== 'running') {
         karmanServer.logger('debug', `an incoming connection was immediately discarded as the server is ${karmanServer.state}.`);
         connection.close();
@@ -194,7 +195,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       }
     };
     const unknownMessage: UnknownMessage = tryParse(rawData);
-    if (!unknownMessage?.type || typeof unknownMessage.type !== 'string') {
+    if (!unknownMessage.type || typeof unknownMessage.type !== 'string') {
       this.logger('warn', 'connection immediately closed, since a message with unknown format '
         + `was received from '${username ?? connectionId}'.`);
       close();
@@ -240,7 +241,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       }
     // Setup: Does NOT have username && trying to join
     } else if (username === undefined && isJoinMessage) {
-      if (!message?.payload?.username) {
+      if (!message.payload?.username) {
         this.logger('warn', 'connection immediately closed, since a join message with unknown format was received '
           + `from '${connectionId}'.`);
         close();
@@ -336,11 +337,9 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     this.state = 'starting';
     this.httpServer.listen(port, () => {
       this.state = 'running';
-      const address = this.httpServer.address();
-      const port = typeof address === 'string' ? address : address?.port;
-      const portNumber = typeof port === 'string' ? -1 : (port || -1);
-      this.logger('info', `started on port ${port}.`);
-      this.emit('start', portNumber);
+      const address = this.httpServer.address() as AddressInfo;
+      this.logger('info', `started on port ${address.port}.`);
+      this.emit('start', address.port);
     });
   }
 
@@ -417,6 +416,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       return false;
     }
     const connection = this.connections[connectionId];
+    /* istanbul ignore if */
     if (connection.readyState !== ws.WebSocket.OPEN) {
       throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.readyState}'`);
     }

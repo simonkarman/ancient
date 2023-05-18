@@ -1,8 +1,7 @@
 import ws from 'ws';
 import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
 
-// eslint-disable-next-line no-process-env
-export const sleep = (ms = Number.parseInt(process.env.DEFAULT_SLEEP_MS ?? '75', 10)) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
 export interface ServerEmit<TMessage> {
   start: jest.Mock<void, [number]>;
@@ -19,11 +18,12 @@ export interface ClientEmit {
   close: jest.Mock<void, []>;
 }
 
-export function withServer<TMessage extends { type: string }>(callback: (props: {
+export function withServer<TMessage extends { type: string }, TScenario>(callback: (props: {
   server: KarmanServer<TMessage>,
   serverEmit: ServerEmit<TMessage>,
   addClient: (username?: string) => Promise<[client: ws.WebSocket, clientEmit: ClientEmit]>,
-}) => Promise<void>): () => Promise<void> {
+  scenario: { index: number, value: TScenario },
+}) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return async () => {
     const server = new KarmanServer<TMessage>();
     const serverEmit: ServerEmit<TMessage> = {
@@ -82,7 +82,9 @@ export function withServer<TMessage extends { type: string }>(callback: (props: 
       return [client, clientEmit];
     };
     try {
-      await callback({ server, addClient, serverEmit });
+      await Promise.all((scenarios || [0 as unknown as TScenario]).map(
+        (scenario, index) => callback({ server, addClient, serverEmit, scenario: { index, value: scenario } }),
+      ));
     } finally {
       clients.forEach((client) => client.close());
       await new Promise<void>((resolve) => {
