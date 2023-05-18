@@ -3,6 +3,29 @@ import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karma
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export function resolver<T extends string>(names: Set<T>, method: (
+  resolve: (name: T, value?: unknown) => void,
+  reject: (reason?: unknown) => void) => void,
+) {
+  return new Promise<Record<T, unknown>>((resolve, reject) => {
+    const todo = new Set(names);
+    const result: Record<T, unknown> = {} as unknown as Record<T, unknown>;
+    const resolveWrapper = (name: T, value: unknown) => {
+      if (todo.delete(name)) {
+        result[name] = value;
+        if (todo.size === 0) {
+          resolve(result);
+        }
+      }
+    };
+    try {
+      method(resolveWrapper, reject);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 export async function stop(server: KarmanServer<KarmanServerMessage>): Promise<void> {
   return new Promise<void>((resolve) => {
     server.on('stop', resolve);

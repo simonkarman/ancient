@@ -1,6 +1,6 @@
 import ws from 'ws';
-import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
-import { stop, withRunningServer } from './test-utils';
+import { KarmanServer, KarmanServerMessage, UserDisconnectedMessage, UserJoinMessage, UserLeaveMessage } from '../src/karman-server';
+import { resolver, sleep, stop, withRunningServer } from './test-utils';
 
 describe('Karman Server', () => {
   test('should emit a start event with the port once the server successfully started', async () => {
@@ -94,7 +94,7 @@ describe('Karman Server', () => {
       })));
     });
   });
-  test('should emmit a message and the sender if it receives a custom message', async () => {
+  test('should emit the message and sender if it receives a custom message', async () => {
     await withRunningServer(async(server, addClient) => {
       const simon = await addClient('simon');
       const customMessage = { type: 'custom', payload: { key: 'value' } };
@@ -108,4 +108,76 @@ describe('Karman Server', () => {
       });
     });
   });
+  test('should inform all clients when a client joins', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const simon = await addClient('simon');
+      const result = await new Promise<unknown>((resolve) => {
+        simon.on('message', (data) => {
+          resolve(JSON.parse(data.toString()));
+        });
+        addClient('lisa');
+      });
+      expect(result).toStrictEqual<UserJoinMessage>({
+        type: 'user/join',
+        payload: { username: 'lisa' },
+      });
+    });
+  });
+  test('should disconnect a client and inform other clients when a client identifies it wants to leave', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const simon = await addClient('simon');
+      const lisa = await addClient('lisa');
+      await sleep(10);
+      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa' } };
+      const result = await resolver(new Set(['otherUserMessage', 'serverLeaveUsername', 'clientDisconnected']), (resolve) => {
+        // Other users should receive a leave event (and not a disconnect event)
+        simon.on('message', (data) => {
+          resolve('otherUserMessage', JSON.parse(data.toString()));
+        });
+        // Server should emit a leave event
+        server.on('leave', (username) => {
+          resolve('serverLeaveUsername', username);
+        });
+        // Client should be disconnected
+        lisa.on('close', () => {
+          resolve('clientDisconnected');
+        });
+        // The client leaves
+        lisa.send(JSON.stringify(leaveMessage));
+      });
+      expect(result.serverLeaveUsername).toStrictEqual('lisa');
+      expect(result.otherUserMessage).toStrictEqual<UserLeaveMessage>(leaveMessage);
+    });
+  });
+  test('should inform all clients when a client disconnects', async () => {
+    await withRunningServer(async(server, addClient) => {
+      const simon = await addClient('simon');
+      const lisa = await addClient('lisa');
+      await sleep(10);
+
+      const result = await resolver(new Set(['otherReceivedMessage', 'serverDisconnectUsername']), (resolve) => {
+        // Other connected users should receive a disconnect event
+        simon.on('message', (data) => {
+          resolve('otherReceivedMessage', JSON.parse(data.toString()));
+        });
+        // Server should emit a disconnect event
+        server.on('disconnect', (username) => {
+          resolve('serverDisconnectUsername', username);
+        });
+        // The client disconnects
+        lisa.close();
+      });
+      expect(result.serverDisconnectUsername).toStrictEqual('lisa');
+      expect(result.otherReceivedMessage).toStrictEqual<UserDisconnectedMessage>({
+        type: 'user/disconnected',
+        payload: { username: 'lisa' },
+      });
+    });
+  });
+  // TODO:
+  //   - should inform all clients when a client reconnects
+  //   - should not emit anything as a connection is closed without ever having joined as a user
+  //   - broadcast
+  //   - send
+  //   - ... more ...
 });
