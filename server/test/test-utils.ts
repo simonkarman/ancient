@@ -1,7 +1,8 @@
 import ws from 'ws';
 import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// eslint-disable-next-line no-process-env
+export const sleep = (ms = Number.parseInt(process.env.DEFAULT_SLEEP_MS ?? '50', 10)) => new Promise((r) => setTimeout(r, ms));
 
 export function resolver<T extends string>(names: Set<T>, method: (
   resolve: (name: T, value?: unknown) => void,
@@ -33,7 +34,7 @@ export async function stop<TMessage extends { type: string }>(server: KarmanServ
   });
 }
 
-export interface ServerMock<TMessage> {
+export interface ServerEmit<TMessage> {
   start: jest.Mock<void, [number]>;
   stop: jest.Mock<void, []>;
   join: jest.Mock<void, [string]>;
@@ -43,19 +44,19 @@ export interface ServerMock<TMessage> {
   message: jest.Mock<void, [string, TMessage]>;
 }
 
-export interface ClientMock {
+export interface ClientEmit {
   message: jest.Mock<void, [unknown]>;
   close: jest.Mock<void, []>;
 }
 
 export function withServer<TMessage extends { type: string }>(callback: (props: {
   server: KarmanServer<TMessage>,
-  serverMock: ServerMock<TMessage>,
-  addClient: (username: string) => Promise<readonly [ws.WebSocket, ClientMock]>,
+  serverEmit: ServerEmit<TMessage>,
+  addClient: (username: string) => Promise<[client: ws.WebSocket, clientEmit: ClientEmit]>,
 }) => Promise<void>): () => Promise<void> {
   return async () => {
     const server = new KarmanServer<TMessage>();
-    const serverMock: ServerMock<TMessage> = {
+    const serverEmit: ServerEmit<TMessage> = {
       start: jest.fn(),
       stop: jest.fn(),
       join: jest.fn(),
@@ -64,14 +65,14 @@ export function withServer<TMessage extends { type: string }>(callback: (props: 
       leave: jest.fn(),
       message: jest.fn(),
     };
-    server.on('start', (port) => serverMock.start(port));
-    server.on('stop', () => serverMock.stop());
-    server.on('join', (username) => serverMock.join(username));
-    server.on('connect', (username) => serverMock.connect(username));
-    server.on('disconnect', (username) => serverMock.disconnect(username));
-    server.on('leave', (username) => serverMock.leave(username));
+    server.on('start', (port) => serverEmit.start(port));
+    server.on('stop', () => serverEmit.stop());
+    server.on('join', (username) => serverEmit.join(username));
+    server.on('connect', (username) => serverEmit.connect(username));
+    server.on('disconnect', (username) => serverEmit.disconnect(username));
+    server.on('leave', (username) => serverEmit.leave(username));
     server.on('message', (username, message) => {
-      serverMock.message(username, message);
+      serverEmit.message(username, message);
     });
 
     const port = await new Promise<number>((resolve) => {
@@ -79,21 +80,21 @@ export function withServer<TMessage extends { type: string }>(callback: (props: 
       server.start();
     });
     const clients: ws.WebSocket[] = [];
-    const addClient = async (username: string) => {
+    const addClient = async (username: string): Promise<[client: ws.WebSocket, clientEmit: ClientEmit]> => {
       const client = new ws.WebSocket(`ws:127.0.0.1:${port}`);
-      const clientMock: ClientMock = {
+      const clientEmit: ClientEmit = {
         message: jest.fn(),
         close: jest.fn(),
       };
       client.on('message', (data) => {
         const dataString = data.toString();
         try {
-          clientMock.message(JSON.parse(dataString));
+          clientEmit.message(JSON.parse(dataString));
         } catch (e) {
-          clientMock.message(dataString);
+          clientEmit.message(dataString);
         }
       });
-      client.on('close', () => {clientMock.close();});
+      client.on('close', () => {clientEmit.close();});
       clients.push(client);
       await new Promise<void>((resolve, reject) => {
         client.on('message', (rawDate) => {
@@ -113,10 +114,13 @@ export function withServer<TMessage extends { type: string }>(callback: (props: 
           client.send(JSON.stringify(userJoinMessage));
         });
       });
-      return [client, clientMock] as const;
+      return [client, clientEmit];
     };
-    await callback({ server, addClient, serverMock });
-    clients.forEach((client) => client.close());
-    await stop(server);
+    try {
+      await callback({ server, addClient, serverEmit });
+    } finally {
+      clients.forEach((client) => client.close());
+      await stop(server);
+    }
   };
 }

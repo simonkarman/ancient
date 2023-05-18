@@ -98,7 +98,7 @@ type KarmanServerEvents<TMessage> = {
  * @description *stopping*: The stop method of the server has been invoked, but the server has not yet stopped.
  * @description *stopped*: The server has stopped.
  */
-type KarmanServerState = 'initializing' | 'starting' | 'running' | 'stopping' | 'stopped';
+export type KarmanServerState = 'initializing' | 'starting' | 'running' | 'stopping' | 'stopped';
 
 /**<KarmanServerEvents<TMessage>>
  * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join and leave.
@@ -362,6 +362,15 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    */
   public getStatus(): KarmanServerState {
     return this.state;
+  }
+
+  /**
+   * Get the current users known to the server.
+   */
+  public getUsers(): { username: string, isConnected: boolean }[] {
+    return Object.entries(this.users).map(([username, { connectionId }]) => {
+      return { username, isConnected: connectionId != undefined };
+    });
   }
 
   /**
