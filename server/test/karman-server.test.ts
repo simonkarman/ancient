@@ -1,4 +1,3 @@
-import ws from 'ws';
 import {
   KarmanServer,
   KarmanServerMessage, KarmanServerState, UserAcceptedMessage,
@@ -7,19 +6,9 @@ import {
   UserLeaveMessage,
   UserReconnectedMessage,
 } from '../src/karman-server';
-import { sleep, stop, withServer } from './test-utils';
+import { sleep, withServer } from './test-utils';
 
 describe('Karman Server', () => {
-  it('should emit a start event with the port once the server successfully started', async () => {
-    const server = new KarmanServer();
-    const port = await new Promise<number>((resolve) => {
-      server.on('start', resolve);
-      server.start();
-    });
-    expect(port).toBeGreaterThan(0);
-    await stop(server);
-  });
-
   it('should cycle through all server statuses when starting and stopping', async () => {
     const server = new KarmanServer();
     expect(server.getStatus()).toStrictEqual<KarmanServerState>('initializing');
@@ -37,30 +26,65 @@ describe('Karman Server', () => {
     expect(server.getStatus()).toStrictEqual<KarmanServerState>('stopped');
   });
 
-  it('should accept a user joining with a valid join message', async () => {
-    const server = new KarmanServer();
-    const port = await new Promise<number>((resolve) => {
-      server.on('start', resolve);
-      server.start();
-    });
-    const client = new ws.WebSocket(`ws:127.0.0.1:${port}`);
-    const message = await new Promise<KarmanServerMessage>((resolve, reject) => {
-      client.on('message', (rawDate) => {
-        try {
-          resolve(JSON.parse(rawDate.toString()));
-        } catch (err) {
-          reject(err);
-        }
-      });
-      client.on('open', () => {
-        const userJoinMessage: UserJoinMessage = { type: 'user/join', payload: { username: 'simon' } };
-        client.send(JSON.stringify(userJoinMessage));
-      });
-    });
-    client.close();
-    expect(message?.type).toStrictEqual('user/accepted');
-    await stop(server);
+  it('should not be allowed to start a server that is already running',
+    withServer(async ({ server }) => {
+      expect(() => server.start()).toThrow('Cannot start a running server.');
+    }),
+  );
+
+  it('should not be allowed to stop a server that is not running', async () => {
+    const karmanServer = new KarmanServer();
+    expect(() => karmanServer.stop()).toThrow('Cannot stop a initializing server.');
+    karmanServer.start();
+    await sleep();
+    karmanServer.stop();
+    await sleep();
+    expect(() => karmanServer.stop()).toThrow('Cannot stop a stopped server.');
   });
+
+  it('should emit a start event with the port once the server successfully started',
+    withServer(async ({ serverEmit }) => {
+      expect(serverEmit.start).toHaveBeenCalledWith(expect.any(Number));
+    }),
+  );
+
+  it('should accept a user joining with a valid join message',
+    withServer(async ({ addClient }) => {
+      const [, simonEmit] = await addClient('simon');
+      expect(simonEmit.message).toHaveBeenCalledWith<[UserAcceptedMessage]>({ type: 'user/accepted' });
+    }),
+  );
+
+  it('should immediately close a connection when it sends an invalid join message',
+    withServer(async ({ addClient }) => {
+      const [client, clientEmit] = await addClient();
+      const invalidJoinMessage = { type: 'user/join', payload: { missing: 'incorrect' } };
+      client.send(JSON.stringify(invalidJoinMessage));
+      await sleep();
+      expect(clientEmit.close).toHaveBeenCalled();
+    }),
+  );
+
+  it('should allow a connection to leave even before it joined',
+    withServer(async ({ addClient }) => {
+      const [client, clientEmit] = await addClient();
+      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'not-important' } };
+      client.send(JSON.stringify(leaveMessage));
+      await sleep();
+      expect(clientEmit.close).toHaveBeenCalled();
+    }),
+  );
+
+  it('should ignore any custom message sent before joining',
+    withServer(async ({ addClient, serverEmit }) => {
+      const [client, clientEmit] = await addClient();
+      const customMessage = { type: 'custom/something' };
+      client.send(JSON.stringify(customMessage));
+      await sleep();
+      expect(clientEmit.close).not.toHaveBeenCalled();
+      expect(serverEmit.message).not.toHaveBeenCalled();
+    }),
+  );
 
   it('should reject a user joining with a username that is already taken',
     withServer(async ({ addClient }) => {
@@ -98,6 +122,16 @@ describe('Karman Server', () => {
       messages.forEach((_, index) => {
         expect(serverEmit.disconnect).toHaveBeenCalledWith(`simon-${index}`);
       });
+    }),
+  );
+
+  it('should allow a user to reconnect after it has disconnected',
+    withServer(async({ serverEmit, addClient }) => {
+      const [simon] = await addClient('simon');
+      await sleep();
+      simon.close();
+      await sleep();
+      await addClient('simon');
     }),
   );
 
@@ -205,9 +239,36 @@ describe('Karman Server', () => {
     }),
   );
 
+  it('should not allow sending a message to a user if the server is not running', async () => {
+    const karmanServer = new KarmanServer();
+    expect(() => karmanServer.send('simon', { type: 'custom/hello' })).toThrow('Cannot send a message if the server is not running.');
+  });
+
+  it('should not allow sending a message to a user if the user does not exist',
+    withServer(async ({ server }) => {
+      expect(() => server.send('simon', { type: 'custom/hello' }))
+        .toThrow('Can not send message to \'simon\' as there is no user with that username.');
+    }),
+  );
+
+  it('should return false when sending a message to a user that is not connected',
+    withServer(async ({ server, addClient }) => {
+      const [simon] = await addClient('simon');
+      simon.close();
+      await sleep();
+      expect(server.send('simon', { type: 'custom/hello' })).toBe(false);
+    }),
+  );
+
+  it('should return true when sending a message to a user that is successful',
+    withServer(async ({ server, addClient }) => {
+      await addClient('simon');
+      expect(server.send('simon', { type: 'custom/hello' })).toBe(true);
+    }),
+  );
+
   // TODO:
   //   - should inform all clients when a client reconnects
-  //   - should not emit anything as a connection is closed without ever having joined as a user
   //   - broadcast
   //   - send
   //   - ... more ...
