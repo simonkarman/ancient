@@ -26,47 +26,97 @@ export function resolver<T extends string>(names: Set<T>, method: (
   });
 }
 
-export async function stop(server: KarmanServer<KarmanServerMessage>): Promise<void> {
+export async function stop<TMessage extends { type: string }>(server: KarmanServer<TMessage>): Promise<void> {
   return new Promise<void>((resolve) => {
     server.on('stop', resolve);
     server.stop();
   });
 }
 
-export async function withRunningServer(callback: (
-  server: KarmanServer<KarmanServerMessage>,
-  withConnectedClient: (username: string) => Promise<ws.WebSocket>,
-) => Promise<void>): Promise<void> {
-  const server = new KarmanServer();
-  const port = await new Promise<number>((resolve) => {
-    server.on('start', resolve);
-    server.start();
-  });
-  const clients: ws.WebSocket[] = [];
-  const withConnectedClient = async (username: string) => {
-    const client = new ws.WebSocket(`ws:127.0.0.1:${port}`);
-    clients.push(client);
-    await new Promise<void>((resolve, reject) => {
-      client.on('message', (rawDate) => {
+export interface ServerMock<TMessage> {
+  start: jest.Mock<void, [number]>;
+  stop: jest.Mock<void, []>;
+  join: jest.Mock<void, [string]>;
+  connect: jest.Mock<void, [string]>;
+  disconnect: jest.Mock<void, [string]>;
+  leave: jest.Mock<void, [string]>;
+  message: jest.Mock<void, [string, TMessage]>;
+}
+
+export interface ClientMock {
+  message: jest.Mock<void, [unknown]>;
+  close: jest.Mock<void, []>;
+}
+
+export function withServer<TMessage extends { type: string }>(callback: (props: {
+  server: KarmanServer<TMessage>,
+  serverMock: ServerMock<TMessage>,
+  addClient: (username: string) => Promise<readonly [ws.WebSocket, ClientMock]>,
+}) => Promise<void>): () => Promise<void> {
+  return async () => {
+    const server = new KarmanServer<TMessage>();
+    const serverMock: ServerMock<TMessage> = {
+      start: jest.fn(),
+      stop: jest.fn(),
+      join: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      leave: jest.fn(),
+      message: jest.fn(),
+    };
+    server.on('start', (port) => serverMock.start(port));
+    server.on('stop', () => serverMock.stop());
+    server.on('join', (username) => serverMock.join(username));
+    server.on('connect', (username) => serverMock.connect(username));
+    server.on('disconnect', (username) => serverMock.disconnect(username));
+    server.on('leave', (username) => serverMock.leave(username));
+    server.on('message', (username, message) => {
+      serverMock.message(username, message);
+    });
+
+    const port = await new Promise<number>((resolve) => {
+      server.on('start', resolve);
+      server.start();
+    });
+    const clients: ws.WebSocket[] = [];
+    const addClient = async (username: string) => {
+      const client = new ws.WebSocket(`ws:127.0.0.1:${port}`);
+      const clientMock: ClientMock = {
+        message: jest.fn(),
+        close: jest.fn(),
+      };
+      client.on('message', (data) => {
+        const dataString = data.toString();
         try {
-          const message: KarmanServerMessage = JSON.parse(rawDate.toString());
-          if (message.type === 'user/accepted') {
-            resolve();
-          } else if (message.type === 'user/rejected') {
-            reject(message.payload.reason);
-          }
-        } catch (err) {
-          reject(err);
+          clientMock.message(JSON.parse(dataString));
+        } catch (e) {
+          clientMock.message(dataString);
         }
       });
-      client.on('open', () => {
-        const userJoinMessage: UserJoinMessage = { type: 'user/join', payload: { username } };
-        client.send(JSON.stringify(userJoinMessage));
+      client.on('close', () => {clientMock.close();});
+      clients.push(client);
+      await new Promise<void>((resolve, reject) => {
+        client.on('message', (rawDate) => {
+          try {
+            const message: KarmanServerMessage = JSON.parse(rawDate.toString());
+            if (message.type === 'user/accepted') {
+              resolve();
+            } else if (message.type === 'user/rejected') {
+              reject(message.payload.reason);
+            }
+          } catch (err) {
+            reject(err);
+          }
+        });
+        client.on('open', () => {
+          const userJoinMessage: UserJoinMessage = { type: 'user/join', payload: { username } };
+          client.send(JSON.stringify(userJoinMessage));
+        });
       });
-    });
-    return client;
+      return [client, clientMock] as const;
+    };
+    await callback({ server, addClient, serverMock });
+    clients.forEach((client) => client.close());
+    await stop(server);
   };
-  await callback(server, withConnectedClient);
-  clients.forEach((client) => client.close());
-  await stop(server);
 }
