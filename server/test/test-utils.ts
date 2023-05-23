@@ -6,6 +6,7 @@ export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 export interface ServerEmit<TMessage> {
   start: jest.Mock<void, [number]>;
   stop: jest.Mock<void, []>;
+  accept: jest.Mock<void, [string, (reason: string) => void]>;
   join: jest.Mock<void, [string]>;
   connect: jest.Mock<void, [string]>;
   disconnect: jest.Mock<void, [string]>;
@@ -29,6 +30,7 @@ export function withServer<TMessage extends { type: string }, TScenario>(callbac
     const serverEmit: ServerEmit<TMessage> = {
       start: jest.fn(),
       stop: jest.fn(),
+      accept: jest.fn(),
       join: jest.fn(),
       connect: jest.fn(),
       disconnect: jest.fn(),
@@ -37,13 +39,12 @@ export function withServer<TMessage extends { type: string }, TScenario>(callbac
     };
     server.on('start', (port) => serverEmit.start(port));
     server.on('stop', () => serverEmit.stop());
+    server.on('accept', (username, reject) => serverEmit.accept(username, reject));
     server.on('join', (username) => serverEmit.join(username));
     server.on('connect', (username) => serverEmit.connect(username));
     server.on('disconnect', (username) => serverEmit.disconnect(username));
     server.on('leave', (username) => serverEmit.leave(username));
-    server.on('message', (username, message) => {
-      serverEmit.message(username, message);
-    });
+    server.on('message', (username, message) => serverEmit.message(username, message));
 
     const port = await new Promise<number>((resolve) => {
       server.on('start', resolve);

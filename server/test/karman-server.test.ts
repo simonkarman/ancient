@@ -60,9 +60,12 @@ describe('Karman Server', () => {
   );
 
   it('should accept a user joining with a valid join message',
-    withServer(async ({ addClient }) => {
+    withServer(async ({ serverEmit, addClient }) => {
       const [, simonEmit] = await addClient('simon');
+      await sleep();
       expect(simonEmit.message).toHaveBeenCalledWith<[UserAcceptedMessage]>({ type: 'user/accepted' });
+      expect(serverEmit.accept).toHaveBeenCalledWith('simon', expect.any(Function));
+      expect(serverEmit.join).toHaveBeenCalledWith('simon');
     }),
   );
 
@@ -425,6 +428,21 @@ describe('Karman Server', () => {
       await sleep();
       const acceptMessage: UserAcceptedMessage = { type: 'user/accepted' };
       expect(clientEmit.message).toHaveBeenCalledWith(acceptMessage);
+    }),
+  );
+
+  it('should reject a new user if the reject callback in the accept hook is called with a reason',
+    withServer(async ({ server, serverEmit, addClient }) => {
+      server.on('accept', (username: string, reject: (reason: string) => void) => {
+        if (server.getUsers().length >= 1) {
+          reject('server is full');
+        }
+      });
+      await addClient('simon');
+      await expect(addClient('lisa')).rejects.toBe('server is full');
+      await expect(addClient('marjolein')).rejects.toBe('server is full');
+      expect(serverEmit.accept).toHaveBeenCalledTimes(3);
+      expect(serverEmit.join).toHaveBeenCalledTimes(1);
     }),
   );
 });

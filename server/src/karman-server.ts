@@ -51,6 +51,14 @@ type KarmanServerEvents<TMessage> = {
   stop: [];
 
   /**
+   * This event is emitted every time a new tries to join the server.
+   *
+   * @param username The username of the new user that is trying to join.
+   * @param reject A reject callback that, if invoked, will reject the user from the server with the provided reason.
+   */
+  accept: [username: string, reject: (reason: string) => void];
+
+  /**
    * This event is emitted every time a new user joins the server.
    *
    * @param username The username of the new user that joined.
@@ -229,11 +237,11 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
             `which '${username}' is not allowed to do.`);
           return;
         }
+        this.logger('info', `'${username}' left.`);
         delete this.users[username];
         this.emit('leave', username);
         close();
         this.broadcast({ type: 'user/leave', payload: { username } });
-        this.logger('info', `'${username}' left.`);
         username = undefined;
         setUsername(undefined);
       } else {
@@ -247,49 +255,63 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         close();
         return;
       }
-      const sendWelcomeMessages = (isJoin: boolean, username: string) => {
-        // Accepted Welcome Message
-        const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
-        send(acceptedMessage);
-        // User Welcome Messages
-        Object.entries(this.users).forEach(([otherUsername, { connectionId }]) => {
-          if (otherUsername === username) {
-            return;
-          }
-          const message: UserDisconnectedMessage | UserReconnectedMessage = {
-            type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
-            payload: { username: otherUsername },
-          };
-          send(message);
-        });
-        // If this is a new joiner, also emit for the new joiner
-        if (isJoin) {
-          this.emit('join', username);
-        }
-        // Emit connect event
-        this.emit('connect', username);
-      };
-      if (this.users[message.payload.username] === undefined) {
-        username = message.payload.username;
-        setUsername(message.payload.username);
-        this.users[message.payload.username] = { connectionId };
-        sendWelcomeMessages(true, username);
-        this.broadcast({ type: 'user/join', payload: { username } });
-        this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
-      } else if (this.users[message.payload.username].connectionId === undefined) {
-        username = message.payload.username;
-        setUsername(message.payload.username);
-        this.users[message.payload.username].connectionId = connectionId;
-        sendWelcomeMessages(false, username);
-        this.broadcast({ type: 'user/reconnected', payload: { username } });
-        this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
-      } else {
+      let rejectedReason: undefined | string;
+      this.emit('accept', message.payload.username, (reason: string) => {
+        rejectedReason = reason;
+      });
+      if (rejectedReason !== undefined) {
         const rejectedMessage: UserRejectedMessage = {
           type: 'user/rejected',
-          payload: { reason: `username ${message.payload.username} is already taken` },
+          payload: { reason: rejectedReason },
         };
+        this.logger('info', `'${message.payload.username}' rejected from connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
         send(rejectedMessage);
-        this.logger('info', `'${message.payload.username}' rejected from connection '${connectionId}', since username is already taken.`);
+      } else {
+        const sendWelcomeMessages = (isJoin: boolean, username: string) => {
+          // Accepted Welcome Message
+          const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
+          send(acceptedMessage);
+          // User Welcome Messages
+          Object.entries(this.users).forEach(([otherUsername, { connectionId }]) => {
+            if (otherUsername === username) {
+              return;
+            }
+            const message: UserDisconnectedMessage | UserReconnectedMessage = {
+              type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
+              payload: { username: otherUsername },
+            };
+            send(message);
+          });
+          // If this is a new joiner, also emit for the new joiner
+          if (isJoin) {
+            this.emit('join', username);
+          }
+          // Emit connect event
+          this.emit('connect', username);
+        };
+        if (this.users[message.payload.username] === undefined) {
+          username = message.payload.username;
+          setUsername(message.payload.username);
+          this.users[message.payload.username] = { connectionId };
+          this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
+          sendWelcomeMessages(true, username);
+          this.broadcast({ type: 'user/join', payload: { username } });
+        } else if (this.users[message.payload.username].connectionId === undefined) {
+          username = message.payload.username;
+          setUsername(message.payload.username);
+          this.users[message.payload.username].connectionId = connectionId;
+          this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
+          sendWelcomeMessages(false, username);
+          this.broadcast({ type: 'user/reconnected', payload: { username } });
+        } else {
+          const rejectedMessage: UserRejectedMessage = {
+            type: 'user/rejected',
+            payload: { reason: `username ${message.payload.username} is already taken` },
+          };
+          this.logger('info', `'${message.payload.username}' rejected from `
+            + `connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
+          send(rejectedMessage);
+        }
       }
     // Early leaver: has no username && trying to leave
     } else if (username === undefined && message.type === 'user/leave') {
