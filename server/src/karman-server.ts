@@ -51,7 +51,7 @@ type KarmanServerEvents<TMessage> = {
   stop: [];
 
   /**
-   * This event is emitted every time a new tries to join the server.
+   * This event is emitted every time a new user tries to join the server.
    *
    * @param username The username of the new user that is trying to join.
    * @param reject A reject callback that, if invoked, will reject the user from the server with the provided reason.
@@ -59,14 +59,14 @@ type KarmanServerEvents<TMessage> = {
   accept: [username: string, reject: (reason: string) => void];
 
   /**
-   * This event is emitted every time a new user joins the server.
+   * This event is emitted every time a new user has joined the server.
    *
    * @param username The username of the new user that joined.
    */
   join: [username: string];
 
   /**
-   * This event is emitted every time a user connects to the server. In other words: the first time the users joins, but also everytime that user
+   * This event is emitted every time a user has connected to the server. In other words: the first time the users joins, but also everytime that user
    *  reconnects.
    * For example: You can use this to send the current state of the server to the client.
    *
@@ -75,21 +75,21 @@ type KarmanServerEvents<TMessage> = {
   connect: [username: string];
 
   /**
-   * This event is emitted every time a user disconnects from the server without intending to leave.
+   * This event is emitted every time a user has disconnected from the server without it indicating it was intending to leave.
    *
    * @param username The username of the user that disconnected.
    */
   disconnect: [username: string];
 
   /**
-   * This event is emitted every time a user leaves the server.
+   * This event is emitted every time a user is about to leave the server.
    *
    * @param username The username of the user that left.
    */
   leave: [username: string],
 
   /**
-   * This event is emitted every time a user sends a message to the server.
+   * This event is emitted every time a user has sent a message to the server.
    *
    * @param username The username of the user that send the message.
    * @param message The content of the message that the user sent.
@@ -255,63 +255,64 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         close();
         return;
       }
-      let rejectedReason: undefined | string;
-      this.emit('accept', message.payload.username, (reason: string) => {
-        rejectedReason = reason;
-      });
-      if (rejectedReason !== undefined) {
-        const rejectedMessage: UserRejectedMessage = {
-          type: 'user/rejected',
-          payload: { reason: rejectedReason },
-        };
-        this.logger('info', `'${message.payload.username}' rejected from connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
-        send(rejectedMessage);
-      } else {
-        const sendWelcomeMessages = (isJoin: boolean, username: string) => {
-          // Accepted Welcome Message
-          const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
-          send(acceptedMessage);
-          // User Welcome Messages
-          Object.entries(this.users).forEach(([otherUsername, { connectionId }]) => {
-            if (otherUsername === username) {
-              return;
-            }
-            const message: UserDisconnectedMessage | UserReconnectedMessage = {
-              type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
-              payload: { username: otherUsername },
-            };
-            send(message);
-          });
-          // If this is a new joiner, also emit for the new joiner
-          if (isJoin) {
-            this.emit('join', username);
+      const sendWelcomeMessages = (isJoin: boolean, username: string) => {
+        // Accepted Welcome Message
+        const acceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
+        send(acceptedMessage);
+        // User Welcome Messages
+        Object.entries(this.users).forEach(([otherUsername, { connectionId }]) => {
+          if (otherUsername === username) {
+            return;
           }
-          // Emit connect event
-          this.emit('connect', username);
-        };
-        if (this.users[message.payload.username] === undefined) {
+          const message: UserDisconnectedMessage | UserReconnectedMessage = {
+            type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
+            payload: { username: otherUsername },
+          };
+          send(message);
+        });
+        // If this is a new joiner, also emit for the new joiner
+        if (isJoin) {
+          this.emit('join', username);
+        }
+        // Emit connect event
+        this.emit('connect', username);
+      };
+      if (this.users[message.payload.username] === undefined) {
+        let rejectedReason: undefined | string;
+        this.emit('accept', message.payload.username, (reason: string) => {
+          rejectedReason = reason;
+        });
+        if (rejectedReason !== undefined) {
+          const rejectedMessage: UserRejectedMessage = {
+            type: 'user/rejected',
+            payload: { reason: rejectedReason },
+          };
+          this.logger('info', `'${message.payload.username}' rejected from `
+            + `connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
+          send(rejectedMessage);
+        } else {
           username = message.payload.username;
           setUsername(message.payload.username);
           this.users[message.payload.username] = { connectionId };
           this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
           sendWelcomeMessages(true, username);
           this.broadcast({ type: 'user/join', payload: { username } });
-        } else if (this.users[message.payload.username].connectionId === undefined) {
-          username = message.payload.username;
-          setUsername(message.payload.username);
-          this.users[message.payload.username].connectionId = connectionId;
-          this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
-          sendWelcomeMessages(false, username);
-          this.broadcast({ type: 'user/reconnected', payload: { username } });
-        } else {
-          const rejectedMessage: UserRejectedMessage = {
-            type: 'user/rejected',
-            payload: { reason: `username ${message.payload.username} is already taken` },
-          };
-          this.logger('info', `'${message.payload.username}' rejected from `
-            + `connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
-          send(rejectedMessage);
         }
+      } else if (this.users[message.payload.username].connectionId === undefined) {
+        username = message.payload.username;
+        setUsername(message.payload.username);
+        this.users[message.payload.username].connectionId = connectionId;
+        this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
+        sendWelcomeMessages(false, username);
+        this.broadcast({ type: 'user/reconnected', payload: { username } });
+      } else {
+        const rejectedMessage: UserRejectedMessage = {
+          type: 'user/rejected',
+          payload: { reason: `username ${message.payload.username} is already taken` },
+        };
+        this.logger('info', `'${message.payload.username}' rejected from `
+          + `connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
+        send(rejectedMessage);
       }
     // Early leaver: has no username && trying to leave
     } else if (username === undefined && message.type === 'user/leave') {

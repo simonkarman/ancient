@@ -39,12 +39,12 @@ export function withServer<TMessage extends { type: string }, TScenario>(callbac
     };
     server.on('start', (port) => serverEmit.start(port));
     server.on('stop', () => serverEmit.stop());
-    server.on('accept', (username, reject) => serverEmit.accept(username, reject));
+    server.on('accept', (username, reject) => {serverEmit.accept(username, reject);});
     server.on('join', (username) => serverEmit.join(username));
     server.on('connect', (username) => serverEmit.connect(username));
     server.on('disconnect', (username) => serverEmit.disconnect(username));
     server.on('leave', (username) => serverEmit.leave(username));
-    server.on('message', (username, message) => serverEmit.message(username, message));
+    server.on('message', (username, message) => {serverEmit.message(username, message);});
 
     const port = await new Promise<number>((resolve) => {
       server.on('start', resolve);

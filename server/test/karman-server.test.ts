@@ -445,4 +445,18 @@ describe('Karman Server', () => {
       expect(serverEmit.join).toHaveBeenCalledTimes(1);
     }),
   );
+
+  it('should not reject a user if it is reconnecting',
+    withServer(async ({ server, serverEmit, addClient }) => {
+      server.on('accept', (username: string, reject: (reason: string) => void) => {
+        if (server.getUsers().length >= 1) {
+          reject('server is full');
+        }
+      });
+      const [client] = await addClient('simon');
+      client.close();
+      await addClient('simon');
+      expect(serverEmit.accept).toHaveBeenCalledTimes(1);
+    }),
+  );
 });

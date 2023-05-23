@@ -7,6 +7,21 @@ type AncientMessage = IncreaseCounterMessage | SetCounterMessage;
 const counter: { [username: string] : number } = {};
 const server = new KarmanServer<AncientMessage>();
 
+server.on('accept', (username: string, reject: (reason: string) => void) => {
+  if (username.length < 3) {
+    reject('username is too short');
+    return;
+  }
+  if (username.length > 10) {
+    reject('username is too long');
+    return;
+  }
+  if (server.getUsers().length > 2) {
+    reject('server is full');
+    return;
+  }
+});
+
 server.on('join', (username: string) => {
   counter[username] = 0;
   server.broadcast({ type: 'counter/set', payload: { counter } });
