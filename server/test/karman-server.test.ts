@@ -6,7 +6,7 @@ import {
   UserDisconnectedMessage,
   UserJoinMessage,
   UserLeaveMessage,
-  UserReconnectedMessage,
+  UserReconnectedMessage, UserRejectedMessage,
 } from '../src/karman-server';
 import { sleep, withServer } from './test-utils';
 
@@ -79,13 +79,13 @@ describe('Karman Server', () => {
     ]),
   );
 
-  it('should ignore a join message when already joined',
+  it('should immediately close a connection when it sends a join message when already joined',
     withServer(async ({ addClient }) => {
       const [simon, simonEmit] = await addClient('simon');
       const joinMessage = { type: 'user/join', payload: { username: 'simon' } };
       simon.send(JSON.stringify(joinMessage));
       await sleep();
-      expect(simonEmit.close).not.toHaveBeenCalled();
+      expect(simonEmit.close).toHaveBeenCalled();
     }),
   );
 
@@ -99,13 +99,13 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should ignore any custom message sent before joining',
+  it('should immediately close a connection when any custom message is sent before joining',
     withServer(async ({ addClient, serverEmit }) => {
       const [client, clientEmit] = await addClient();
       const customMessage = { type: 'custom/something' };
       client.send(JSON.stringify(customMessage));
       await sleep();
-      expect(clientEmit.close).not.toHaveBeenCalled();
+      expect(clientEmit.close).toHaveBeenCalled();
       expect(serverEmit.message).not.toHaveBeenCalled();
     }),
   );
@@ -329,9 +329,10 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should not allow sending a message to a user if the server is not running', async () => {
+  it('should not allow sending or broadcasting a message to a user if the server is not running', async () => {
     const karmanServer = new KarmanServer();
     expect(() => karmanServer.send('simon', { type: 'custom/hello' })).toThrow('Cannot send a message if the server is not running.');
+    expect(() => karmanServer.broadcast({ type: 'custom/hello' })).toThrow('Cannot broadcast a message if the server is not running.');
   });
 
   it('should not allow sending a message to a user if the user does not exist',
@@ -406,6 +407,24 @@ describe('Karman Server', () => {
       await sleep();
       expect(simonEmit.message).not.toHaveBeenCalledWith({ type: 'custom/hello' });
       expect(lisaEmit.message).toHaveBeenCalledWith({ type: 'custom/hello' });
+    }),
+  );
+
+  it('should allow a connection to connect correctly after it was rejected before',
+    withServer(async ({ server, addClient }) => {
+      await addClient('simon');
+      const [client, clientEmit] = await addClient();
+      await sleep();
+      const joinMessage: UserJoinMessage = { type: 'user/join', payload: { username: 'simon' } };
+      client.send(JSON.stringify(joinMessage));
+      await sleep();
+      const rejectMessage: UserRejectedMessage = { type: 'user/rejected', payload: { reason: 'username simon is already taken' } };
+      expect(clientEmit.message).toHaveBeenCalledWith(rejectMessage);
+      joinMessage.payload.username = 'lisa';
+      client.send(JSON.stringify(joinMessage));
+      await sleep();
+      const acceptMessage: UserAcceptedMessage = { type: 'user/accepted' };
+      expect(clientEmit.message).toHaveBeenCalledWith(acceptMessage);
     }),
   );
 });

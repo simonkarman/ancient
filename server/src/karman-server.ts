@@ -302,6 +302,8 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     } else {
       this.logger('warn', `connection '${connectionId}' received a message of type '${message.type}'`
         + `, while it is ${username ? '' : 'NOT '}connected to a user.`);
+      close();
+      return;
     }
   }
 

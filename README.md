@@ -3,7 +3,6 @@ WebSocket board game by [Simon Karman](https://www.simonkarman.nl)
 
 ## Upcoming features
 Next in line:
-- Ensure that any case in which a message is 'ignored', that the connection is closed, since we shouldn't allow any ignore behaviour for backwards compatability sake 
 - Allow rejecting new users with a callback (with reason)
 - Make the server use the same TypeScript interface definitions as the client
 - Make the server use a centralized state management tool
