@@ -6,12 +6,14 @@ describe('Event Emitter', () => {
     file: [size: number, name: string];
   }
   class ExampleEmitter extends EventEmitter<ExampleEvents> {
-    test() {
-      this.emit('hello', 'world');
-      this.emit('file', 11, 'example.json');
+    test(): [unknown[], unknown[]] {
+      return [
+        this.emit('hello', 'world'),
+        this.emit('file', 11, 'example.json'),
+      ];
     }
   }
-  test('should callback listener on emit with the provided value', async () => {
+  it('should callback listener on emit with the provided value', async () => {
     let receivedFromHello: [string] | undefined;
     let receivedFromFile: [number, string] | undefined;
     const emitter = new ExampleEmitter();
@@ -21,11 +23,11 @@ describe('Event Emitter', () => {
     emitter.on('file', (size, name) => {
       receivedFromFile = [size, name];
     });
-    emitter.test();
+    expect(emitter.test()).toStrictEqual([[], []]);
     expect(receivedFromHello).toStrictEqual(['world']);
     expect(receivedFromFile).toStrictEqual([11, 'example.json']);
   });
-  test('should callback each listener on emit', async () => {
+  it('should callback each listener on emit', async () => {
     const helloMock1 = jest.fn();
     const helloMock2 = jest.fn();
     const emitter = new ExampleEmitter();
@@ -35,16 +37,25 @@ describe('Event Emitter', () => {
     expect(helloMock1).toBeCalledTimes(1);
     expect(helloMock2).toBeCalledTimes(1);
   });
-  test('should allow emitting an event without any listeners', async () => {
+  it('should allow emitting an event without any listeners', async () => {
     const emitter = new ExampleEmitter();
     emitter.test();
   });
-  test('should callback a listener only once on emit if it was already registered', async () => {
+  it('should callback a listener only once on emit if it is registered twice', async () => {
     const helloMock = jest.fn();
     const emitter = new ExampleEmitter();
     emitter.on('hello', helloMock);
     emitter.on('hello', helloMock);
     emitter.test();
     expect(helloMock).toBeCalledTimes(1);
+  });
+  it('should ignore a listener that throws and return false', async () => {
+    const helloMock = jest.fn();
+    const emitter = new ExampleEmitter();
+    emitter.on('hello', () => helloMock());
+    emitter.on('hello', jest.fn(() => { helloMock(); throw Error('custom'); }));
+    emitter.on('hello', () => helloMock());
+    expect(emitter.test()).toStrictEqual([[Error('custom')], []]);
+    expect(helloMock).toBeCalledTimes(3);
   });
 });

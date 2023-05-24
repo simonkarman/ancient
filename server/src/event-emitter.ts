@@ -18,10 +18,16 @@ export abstract class EventEmitter<EventMap extends Record<string, Array<unknown
     this.eventListeners[eventName] = listeners;
   }
 
-  protected emit<K extends keyof EventMap>(eventName: K, ...args: EventMap[K]): void {
+  protected emit<K extends keyof EventMap>(eventName: K, ...args: EventMap[K]): unknown[] {
     const listeners = this.eventListeners[eventName] ?? new Set();
+    const errors: unknown[] = [];
     for (const listener of listeners) {
-      listener(...args);
+      try {
+        listener(...args);
+      } catch (e: unknown) {
+        errors.push(e);
+      }
     }
+    return errors;
   }
 }
