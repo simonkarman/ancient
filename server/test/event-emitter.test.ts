@@ -58,4 +58,20 @@ describe('Event Emitter', () => {
     expect(emitter.test()).toStrictEqual([[Error('custom')], []]);
     expect(helloMock).toBeCalledTimes(3);
   });
+  it('should not allow subscriptions or emits while emitting', async () => {
+    class RecursiveEmitter extends EventEmitter<ExampleEvents> {
+      test() {
+        const helloMock = jest.fn();
+        this.on('hello', () => {
+          expect(() => this.on('hello', helloMock)).toThrow('cannot subscribe while emitting');
+          expect(() => this.on('file', helloMock)).toThrow('cannot subscribe while emitting');
+          expect(() => this.emit('hello', 'a')).toThrow('cannot emit while emitting');
+          expect(() => this.emit('file', 2, 'a')).toThrow('cannot emit while emitting');
+        });
+        expect(this.emit('hello', 'simon')).toStrictEqual([]);
+        expect(helloMock).toBeCalledTimes(0);
+      }
+    }
+    new RecursiveEmitter().test();
+  });
 });
