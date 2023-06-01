@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef, createContext, useContext, FC, PropsWithChildren } from 'react';
 import { counterReset, selectCounter } from './app/counterSlice';
 import { useAppDispatch, useAppSelector } from './app/hooks';
-import { userReset, selectIsAccepted, selectIsRejected, selectRejectionReason, selectUsers } from './app/userSlice';
+import {
+  userReset,
+  selectIsAccepted,
+  selectIsRejected,
+  selectRejectionReason,
+  selectUsers,
+  selectLatestLeaveReason,
+  userResetLatestLeaveReason,
+} from './app/userSlice';
 
 type WebSocketContextProps = [string, WebSocket['send']];
 const WebSocketContext = createContext<WebSocketContextProps>(['', () => {}]);
@@ -40,6 +48,7 @@ const WebSocketProvider: FC<PropsWithChildren<{
       socket.close();
     };
   }, [dispatch, props]);
+  // TODO: should not be based on connection, but based on state of negotiation with server (accept, reject, join, leave, ...)
   return (
     <WebSocketContext.Provider value={[props.username, ws.current?.send.bind(ws.current)]}>
       {connection === 'connecting' && <p>
@@ -53,11 +62,16 @@ const WebSocketProvider: FC<PropsWithChildren<{
         {isAccepted && <>
           {props.children}
         </>}
-        {isRejected && <p>
-          Server rejected you because of: {rejectionReason}
-        </p>}
+        {isRejected && <>
+          <p>Server rejected you ({props.username}) because of: {rejectionReason}</p>
+          <button onClick={() => {
+            ws.current.send(JSON.stringify({ type: 'user/join', payload: { username: props.username } }));
+          }}>
+                Retry
+          </button>
+        </>}
         <button onClick={() => {
-          ws.current.send(JSON.stringify({ type: 'user/leave', payload: { username: props.username } }));
+          ws.current.send(JSON.stringify({ type: 'user/leave', payload: { username: props.username, reason: 'voluntary' } }));
         }}>
           Leave
         </button>
@@ -97,22 +111,27 @@ export default function App() {
 }
 
 function Ancient() {
+  const dispatch = useAppDispatch();
   const users = useAppSelector(selectUsers);
+  const latestLeaveReason = useAppSelector(selectLatestLeaveReason);
   const counter = useAppSelector(selectCounter);
   const [username, send] = useWebSocket();
   return (<>
-    <ul style={{ float: 'right' }}>
-      {users.map(user =>
-        <li key={user.username}>
-          {user.username}
-          {' '}
+    <div style={{ float: 'right' }}>
+      <ul>
+        {users.map(user =>
+          <li key={user.username}>
+            {user.username}
+            {' '}
           (is
-          {' '}
-          {user.isConnected ? 'online' : 'offline'}
+            {' '}
+            {user.isConnected ? 'online' : 'offline'}
           )
-        </li>,
-      )}
-    </ul>
+          </li>,
+        )}
+      </ul>
+      {latestLeaveReason && (<p onClick={() => dispatch(userResetLatestLeaveReason())}>{latestLeaveReason}</p>)}
+    </div>
     <p>
       Hello,
       {' '}

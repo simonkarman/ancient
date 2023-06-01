@@ -49,7 +49,7 @@ describe('Event Emitter', () => {
     emitter.test();
     expect(helloMock).toBeCalledTimes(1);
   });
-  it('should ignore a listener that throws and return false', async () => {
+  it('should catch a listener that throws and return the error', async () => {
     const helloMock = jest.fn();
     const emitter = new ExampleEmitter();
     emitter.on('hello', () => helloMock());
@@ -58,18 +58,44 @@ describe('Event Emitter', () => {
     expect(emitter.test()).toStrictEqual([[Error('custom')], []]);
     expect(helloMock).toBeCalledTimes(3);
   });
-  it('should not allow subscriptions or emits while emitting', async () => {
+  it('should not allow subscriptions on the specific event(s) being emitted', async () => {
     class RecursiveEmitter extends EventEmitter<ExampleEvents> {
       test() {
         const helloMock = jest.fn();
+        const fileMock = jest.fn();
         this.on('hello', () => {
-          expect(() => this.on('hello', helloMock)).toThrow('cannot subscribe while emitting');
-          expect(() => this.on('file', helloMock)).toThrow('cannot subscribe while emitting');
-          expect(() => this.emit('hello', 'a')).toThrow('cannot emit while emitting');
-          expect(() => this.emit('file', 2, 'a')).toThrow('cannot emit while emitting');
+          expect(() => this.on('hello', helloMock)).toThrow('cannot subscribe to \'hello\' event while that is also being emitted');
+          expect(() => this.on('file', fileMock)).not.toThrow();
+          expect(() => this.emit('file', 2, 'a')).not.toThrow();
         });
         expect(this.emit('hello', 'simon')).toStrictEqual([]);
+        expect(fileMock).toBeCalledTimes(1);
         expect(helloMock).toBeCalledTimes(0);
+      }
+    }
+    new RecursiveEmitter().test();
+  });
+  it('should not allow subscriptions on all event(s) being currently emitted', async () => {
+    class RecursiveEmitter extends EventEmitter<ExampleEvents> {
+      test() {
+        const mock = jest.fn();
+        this.on('hello', (name: string) => {
+          expect(() => this.on('hello', mock)).toThrow('cannot subscribe to \'hello\' event while that is also being emitted');
+          if (name === 'from-file') {
+            expect(() => this.on('file', mock)).toThrow('cannot subscribe to \'file\' event while that is also being emitted');
+          } else if (name === 'from-root') {
+            this.emit('hello', 'from-hello');
+          } else {
+            expect(() => this.on('file', mock)).not.toThrow();
+          }
+          expect(() => this.on('hello', mock)).toThrow('cannot subscribe to \'hello\' event while that is also being emitted');
+        });
+        this.on('file', () => {
+          expect(this.emit('hello', 'from-file')).toStrictEqual([]);
+        });
+        expect(this.emit('file', 3, 'kg')).toStrictEqual([]);
+        expect(this.emit('hello', 'from-root')).toStrictEqual([]);
+        expect(mock).not.toBeCalled();
       }
     }
     new RecursiveEmitter().test();

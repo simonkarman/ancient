@@ -5,7 +5,7 @@ WebSocket board game by [Simon Karman](https://www.simonkarman.nl)
 There are different components that together form the Ancient board game. Each has its own upcoming features.
 
 ### Add additional Karman Server functionality
-1. Karman Server: Add kick method on KarmanServer to make a client leave
+1. Karman Server: Fix all todo comments throughout the server and client code
 2. Karman Server: Allow use of an existing http(s) server for the karman server and provide a path on that server
 3. Karman Server: Add built in verification with http headers before ws connection is set up to validate server and client are running the same version
 4. Karman Server: Identity management - Using credentials (from signed JWT) for username (AND instead of username use a User object to capture more user data)

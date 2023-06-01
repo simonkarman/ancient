@@ -10,7 +10,7 @@ export interface ServerEmit<TMessage> {
   join: jest.Mock<void, [string]>;
   connect: jest.Mock<void, [string]>;
   disconnect: jest.Mock<void, [string]>;
-  leave: jest.Mock<void, [string]>;
+  leave: jest.Mock<void, [string, 'voluntary' | 'kicked']>;
   message: jest.Mock<void, [string, TMessage]>;
 }
 
@@ -43,7 +43,7 @@ export function withServer<TMessage extends { type: string }, TScenario>(callbac
     server.on('join', (username) => serverEmit.join(username));
     server.on('connect', (username) => serverEmit.connect(username));
     server.on('disconnect', (username) => serverEmit.disconnect(username));
-    server.on('leave', (username) => serverEmit.leave(username));
+    server.on('leave', (username, reason) => {serverEmit.leave(username, reason);});
     server.on('message', (username, message) => {serverEmit.message(username, message);});
 
     const port = await new Promise<number>((resolve) => {

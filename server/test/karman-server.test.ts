@@ -95,7 +95,7 @@ describe('Karman Server', () => {
   it('should allow a connection to leave even before it joined',
     withServer(async ({ addClient }) => {
       const [client, clientEmit] = await addClient();
-      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'not-important' } };
+      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'not-important', reason: 'voluntary' } }; // TODO: payload here is weird
       client.send(JSON.stringify(leaveMessage));
       await sleep();
       expect(clientEmit.close).toHaveBeenCalled();
@@ -227,6 +227,7 @@ describe('Karman Server', () => {
       lisa.close();
       await sleep();
       const [, marjoleinEmit] = await addClient('marjolein');
+      await sleep();
       expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserAcceptedMessage]>({
         type: 'user/accepted',
       });
@@ -257,11 +258,11 @@ describe('Karman Server', () => {
       const [, simonEmit] = await addClient('simon');
       const [lisa, lisaEmit] = await addClient('lisa');
       await sleep();
-      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa' } };
+      const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa', reason: 'voluntary' } }; // TODO: should not have to sent reason
       lisa.send(JSON.stringify(leaveMessage));
       await sleep();
       expect(simonEmit.message).toHaveBeenCalledWith(leaveMessage);
-      expect(serverEmit.leave).toHaveBeenCalledWith('lisa');
+      expect(serverEmit.leave).toHaveBeenCalledWith('lisa', 'voluntary');
       expect(lisaEmit.close).toBeCalled();
       expect(server.getUsers()).toStrictEqual<ReturnType<KarmanServer<KarmanServerMessage>['getUsers']>>([
         { username: 'simon', isConnected: true },
@@ -275,7 +276,7 @@ describe('Karman Server', () => {
       const [simon] = await addClient('simon');
       const [, lisaEmit] = await addClient('lisa');
       await sleep();
-      const lisaLeaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa' } };
+      const lisaLeaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa', reason: 'voluntary' } }; // TODO: should not have to sent reason
       simon.send(JSON.stringify(lisaLeaveMessage));
       await sleep();
       expect(lisaEmit.close).not.toHaveBeenCalled();
@@ -332,13 +333,14 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should not allow sending or broadcasting a message to a user if the server is not running', async () => {
+  it('should not allow send, broadcast, or kick if the server is not running', async () => {
     const karmanServer = new KarmanServer();
     expect(() => karmanServer.send('simon', { type: 'custom/hello' })).toThrow('Cannot send a message if the server is not running.');
     expect(() => karmanServer.broadcast({ type: 'custom/hello' })).toThrow('Cannot broadcast a message if the server is not running.');
+    expect(() => karmanServer.kick('simon')).toThrow('Cannot kick a user if the server is not running.');
   });
 
-  it('should not allow sending a message to a user if the user does not exist',
+  it('should not allow sending a message to a user, if that user does not exist',
     withServer(async ({ server }) => {
       expect(() => server.send('simon', { type: 'custom/hello' }))
         .toThrow('Can not send message to \'simon\' as there is no user with that username.');
@@ -395,8 +397,8 @@ describe('Karman Server', () => {
         const [, simonEmit] = await addClient('simon');
         await sleep();
         const numberOfMessages = simonEmit.message.mock.calls.length;
-        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages - 2, { type: 'custom/welcome-on-join' });
-        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages - 1, { type: 'custom/welcome-on-connect' });
+        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages - 1, { type: 'custom/welcome-on-join' });
+        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages, { type: 'custom/welcome-on-connect' });
       }),
     );
   });
@@ -459,4 +461,31 @@ describe('Karman Server', () => {
       expect(serverEmit.accept).toHaveBeenCalledTimes(1);
     }),
   );
+
+  it('should be able to kick a user from the server',
+    withServer(async ({ server, serverEmit, addClient }) => {
+      const [, simonEmit] = await addClient('simon');
+      const [, lisaEmit] = await addClient('lisa');
+      server.kick('simon');
+      await sleep();
+      const kickMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'simon', reason: 'kicked' } };
+      expect(simonEmit.message).toHaveBeenCalledWith(kickMessage);
+      expect(simonEmit.close).toHaveBeenCalled();
+      expect(lisaEmit.message).toHaveBeenCalledWith(kickMessage);
+      expect(lisaEmit.close).not.toHaveBeenCalled();
+      expect(serverEmit.leave).toHaveBeenCalledWith('simon', 'kicked');
+      expect(server.getUsers()).toStrictEqual<ReturnType<KarmanServer<KarmanServerMessage>['getUsers']>>([
+        { username: 'lisa', isConnected: true },
+      ]);
+    }),
+  );
+
+  it('should not allow kicking a user, if that user does not exist',
+    withServer(async ({ server }) => {
+      expect(() => server.kick('simon')).toThrow('Can not kick \'simon\' as there is no user with that username.');
+    }),
+  );
+
+  // TODO: should be able to kick a >disconnected< user from the server
+  // TODO: add test for metadata property
 });

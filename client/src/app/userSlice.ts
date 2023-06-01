@@ -5,12 +5,14 @@ import type { RootState } from './store';
 type UserState = {
   isAccepted: boolean;
   rejectionReason: string | undefined;
-  users: { [username: string]: { isConnected: boolean}}
+  users: { [username: string]: { isConnected: boolean}};
+  latestLeaveReason: string | undefined;
 }
 const initialState: UserState = {
   isAccepted: false,
   rejectionReason: undefined,
   users: {},
+  latestLeaveReason: undefined,
 };
 
 const newUser = () => ({ isConnected: true });
@@ -20,7 +22,10 @@ const userSlice = createSlice({
   initialState,
   reducers: {
     reset: () => {
-      return { isAccepted: false, rejectionReason: undefined, users: {} };
+      return { isAccepted: false, rejectionReason: undefined, users: {}, latestLeaveReason: undefined };
+    },
+    resetLatestLeaveReason: (state) => {
+      state.latestLeaveReason = undefined;
     },
     accepted: (state) => {
       state.isAccepted = true;
@@ -31,7 +36,9 @@ const userSlice = createSlice({
     join: (state, action: PayloadAction<{ username: string }>) => {
       state.users[action.payload.username] = newUser();
     },
-    leave: (state, action: PayloadAction<{ username: string }>) => {
+    leave: (state, action: PayloadAction<{ username: string, reason: 'voluntary' | 'kicked' }>) => {
+      const leaveReason = (action.payload.reason === 'kicked') ? ', because it was kicked' : ' voluntarily';
+      state.latestLeaveReason = `User '${action.payload.username}' left the server${leaveReason}.`;
       delete state.users[action.payload.username];
     },
     disconnected: (state, action: PayloadAction<{ username: string }>) => {
@@ -51,10 +58,11 @@ const userSlice = createSlice({
   },
 });
 
-export const { reset: userReset } = userSlice.actions;
+export const { reset: userReset, resetLatestLeaveReason: userResetLatestLeaveReason } = userSlice.actions;
 export const selectIsAccepted = (rootState: RootState) => rootState.user.isAccepted;
 export const selectIsRejected = (rootState: RootState) => rootState.user.rejectionReason !== undefined;
 export const selectRejectionReason = (rootState: RootState) => rootState.user.rejectionReason;
+export const selectLatestLeaveReason = (rootState: RootState) => rootState.user.latestLeaveReason;
 export const selectUsers = (rootState: RootState) => {
   return Object.entries(rootState.user.users).map(([username, user]) => ({ ...user, username }));
 };

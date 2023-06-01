@@ -1,13 +1,15 @@
 import ws, { AddressInfo } from 'ws';
 import http from 'http';
 import short from 'short-uuid';
+import { DateTime } from 'luxon';
 import { EventEmitter } from './event-emitter';
 
+// TODO: make types of KarmanServer be more unique to avoid accidental overlap with custom message types (?)
 export type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
 export type UserJoinMessage = { type: 'user/join', payload: { username: string } };
 export type UserRejectedMessage = { type: 'user/rejected', payload: { reason: string } };
 export type UserAcceptedMessage = { type: 'user/accepted' };
-export type UserLeaveMessage = { type: 'user/leave', payload: { username: string } };
+export type UserLeaveMessage = { type: 'user/leave', payload: { username: string, reason: 'voluntary' | 'kicked' } };
 export type UserReconnectedMessage = { type: 'user/reconnected', payload: { username: string } };
 export type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
 export type KarmanServerMessage = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserAcceptedMessage | UserLeaveMessage
@@ -32,9 +34,19 @@ type KarmanServerLogger = (severity: LogSeverity, message: string) => void;
  */
 export type KarmanServerProps = {
   /**
+   * The logger that the Karman Server should use.
+   *
    * @default When not provided, it will log (non debug) to the standard console.
    */
   log?: KarmanServerLogger;
+
+  // TODO: explain what metadata is added
+  /**
+   * Whether metadata should be added to sent and broadcast messages.
+   *
+   * @default When not provided, metadata will not be added to messages.
+   */
+  metadata?: boolean;
 };
 
 type KarmanServerEvents<TMessage> = {
@@ -81,12 +93,14 @@ type KarmanServerEvents<TMessage> = {
    */
   disconnect: [username: string];
 
+  // TODO: change reason to boolean isKicked
   /**
    * This event is emitted every time a user is about to leave the server.
    *
    * @param username The username of the user that left.
+   * @param reason The reason why the user left the server. This can be either voluntarily (voluntary) or because it was kicked (kicked).
    */
-  leave: [username: string],
+  leave: [username: string, reason: 'voluntary' | 'kicked'],
 
   /**
    * This event is emitted every time a user has sent a message to the server.
@@ -117,8 +131,9 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
   private state: KarmanServerState;
 
   // Internal State
-  private readonly connections: { [connectionId: string]: ws.WebSocket } = {};
+  private readonly connections: { [connectionId: string]: { socket: ws.WebSocket, username: string | undefined } } = {};
   private readonly users: { [username: string]: { connectionId: string | undefined } } = {};
+  private readonly metadata: boolean;
 
   /**
    * Create a new Karman Server.
@@ -140,40 +155,42 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     const wsServer = new ws.WebSocketServer({ server: this.httpServer });
 
     // Configuration
-    this.logger = props?.log || ((severity: LogSeverity, message: string) => {
+    this.logger = props?.log ?? ((severity: LogSeverity, message: string) => {
       severity !== 'debug' && console[severity](`[${severity}] [karman-server] ${message}`);
     });
+    this.metadata = props?.metadata ?? false;
 
     // Configure websocket server
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const karmanServer = this;
-    wsServer.on('connection', function(connection) {
+    wsServer.on('connection', function(socket) {
       /* istanbul ignore if */
       if (karmanServer.state !== 'running') {
         karmanServer.logger('debug', `an incoming connection was immediately discarded as the server is ${karmanServer.state}.`);
-        connection.close();
+        socket.close();
         return;
       }
 
       const connectionId = `cn-${short.generate()}`;
-      let username: string | undefined = undefined;
-      karmanServer.connections[connectionId] = connection;
+      karmanServer.connections[connectionId] = { socket, username: undefined };
       karmanServer.logger('debug', `connection '${connectionId}' opened.`);
 
-      connection.on('message', (data) => {
+      socket.on('message', (data) => {
         karmanServer.onRawDataReceived(
           data,
           connectionId,
-          username,
-          (_username: string | undefined) => username = _username,
-          () => connection.close(),
-          (message: KarmanServerMessage) => connection.send(JSON.stringify(message)),
+          karmanServer.connections[connectionId].username, // TODO: we don't have to send this along anymore now that username is in the connections object
+          (_username: string | undefined) => karmanServer.connections[connectionId].username = _username, // TODO: we don't have to send this along anymore now that username is in the connections object
+          () => socket.close(),
+          (message: KarmanServerMessage) => socket.send(JSON.stringify({
+            ...message,
+            ...karmanServer.getMetadata(false),
+          })),
         );
       });
 
-      connection.on('close', () => {
-        karmanServer.onConnectionClosed(connectionId, username);
-        username = undefined;
+      socket.on('close', () => {
+        karmanServer.onConnectionClosed(connectionId);
       });
     });
   }
@@ -238,10 +255,11 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
           return;
         }
         this.logger('info', `'${username}' left.`);
+        const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username, reason: 'voluntary' } };
+        this.broadcast(leaveMessage);
         delete this.users[username];
-        this.emit('leave', username);
-        close();
-        this.broadcast({ type: 'user/leave', payload: { username } });
+        this.emit('leave', username, 'voluntary');
+        close(); // TODO: do we really need to close the connection on a leave?
         username = undefined;
         setUsername(undefined);
       } else {
@@ -272,7 +290,10 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         });
         // If this is a new joiner, also emit for the new joiner
         if (isJoin) {
+          this.broadcast({ type: 'user/join', payload: { username } });
           this.emit('join', username);
+        } else {
+          this.broadcast({ type: 'user/reconnected', payload: { username } });
         }
         // Emit connect event
         this.emit('connect', username);
@@ -296,7 +317,6 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
           this.users[message.payload.username] = { connectionId };
           this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
           sendWelcomeMessages(true, username);
-          this.broadcast({ type: 'user/join', payload: { username } });
         }
       } else if (this.users[message.payload.username].connectionId === undefined) {
         username = message.payload.username;
@@ -304,7 +324,6 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         this.users[message.payload.username].connectionId = connectionId;
         this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
         sendWelcomeMessages(false, username);
-        this.broadcast({ type: 'user/reconnected', payload: { username } });
       } else {
         const rejectedMessage: UserRejectedMessage = {
           type: 'user/rejected',
@@ -317,7 +336,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     // Early leaver: has no username && trying to leave
     } else if (username === undefined && message.type === 'user/leave') {
       this.logger('debug', `connection '${connectionId}' is voluntarily leaving before being accepted.`);
-      close();
+      close(); // TODO: do we really need to close the connection on a leave?
       return;
     // Weird situations
     //  - the username is set, but getting a 'trying to join' message
@@ -334,9 +353,10 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    * Internal method for when a WebSocket connection is closed
    * @private
    */
-  private onConnectionClosed(connectionId: string, username: string | undefined): void {
+  private onConnectionClosed(connectionId: string): void {
+    const username = this.connections[connectionId].username;
+    delete this.connections[connectionId];
     if (username === undefined) {
-      delete this.connections[connectionId];
       this.logger('debug', `connection '${connectionId}' closed.`);
     } else {
       this.users[username].connectionId = undefined;
@@ -398,6 +418,21 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
   }
 
   /**
+   * Get the metadata that should be sent along with every message.
+   *
+   * @param isBroadcast Whether this message is a broadcast to all users.
+   */
+  private getMetadata(isBroadcast: boolean) {
+    return this.metadata ? {
+      metadata: {
+        isBroadcast,
+        timestamp: DateTime.now().toUTC().toISO(),
+      },
+    } : undefined;
+  }
+
+  // TODO: public method signature should not include KarmanServerMessage
+  /**
    * Broadcasts a message to all users, that are currently connected to the server.
    *
    * @param message The message to send to all the users.
@@ -409,13 +444,13 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     if (this.state !== 'running') {
       throw new Error('Cannot broadcast a message if the server is not running.');
     }
-    const data = JSON.stringify(message);
+    const data = JSON.stringify({ ...message, ...this.getMetadata(true) });
     return Object.entries(this.users)
       .filter(([username, { connectionId }]) => skipUsername !== username && connectionId !== undefined)
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       .map(([, { connectionId }]) => this.connections[connectionId!])
-      .filter(connection => connection.readyState === ws.WebSocket.OPEN)
-      .map(connection => connection.send(data))
+      .filter(connection => connection.socket.readyState === ws.WebSocket.OPEN)
+      .map(connection => connection.socket.send(data))
       .length;
   }
 
@@ -425,7 +460,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    * @param username The username of the user to send the message to.
    * @param message The message to send to the user.
    *
-   * @returns Returns whether the message is sent to the client.
+   * @returns Returns whether the message is sent to the client. This is false if the user is not connected to the server.
    */
   public send(username: string, message: TMessage): boolean {
     if (this.state !== 'running') {
@@ -442,12 +477,40 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     }
     const connection = this.connections[connectionId];
     /* istanbul ignore if */
-    if (connection.readyState !== ws.WebSocket.OPEN) {
-      throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.readyState}'`);
+    if (connection.socket.readyState !== ws.WebSocket.OPEN) {
+      throw new Error(`Can not send message to '${username}' as the connection '${connection}' its using is '${connection.socket.readyState}'`);
     }
-    const data = JSON.stringify(message);
-    connection.send(data);
+    const data = JSON.stringify({ ...message, ...this.getMetadata(false) });
+    connection.socket.send(data);
     return true;
+  }
+
+  /**
+   * Kick a user from the server.
+   *
+   * @param username The username of the user to kick from the server.
+   */
+  public kick(username: string): void {
+    if (this.state !== 'running') {
+      throw new Error('Cannot kick a user if the server is not running.');
+    }
+    const user = this.users[username];
+    if (user === undefined) {
+      throw new Error(`Can not kick '${username}' as there is no user with that username.`);
+    }
+
+    this.logger('info', `'${username}' kicked.`);
+    const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username, reason: 'kicked' } };
+    this.broadcast(leaveMessage);
+    delete this.users[username];
+    this.emit('leave', username, 'kicked');
+    const { connectionId } = user;
+    if (connectionId !== undefined) {
+      this.connections[connectionId].username = undefined;
+      if (this.connections[connectionId].socket.readyState === ws.WebSocket.OPEN) {
+        this.connections[connectionId].socket.close(); // TODO: do we really need to close the connection on a leave?
+      }
+    }
   }
 }
 

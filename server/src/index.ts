@@ -5,7 +5,9 @@ type SetCounterMessage = { type: 'counter/set', payload: { counter: { [username:
 type AncientMessage = IncreaseCounterMessage | SetCounterMessage;
 
 const counter: { [username: string] : number } = {};
-const server = new KarmanServer<AncientMessage>();
+const server = new KarmanServer<AncientMessage>({
+  metadata: true,
+});
 
 server.on('accept', (username: string, reject: (reason: string) => void) => {
   if (username.length < 3) {
@@ -24,13 +26,19 @@ server.on('accept', (username: string, reject: (reason: string) => void) => {
 
 server.on('join', (username: string) => {
   counter[username] = 0;
+
   server.broadcast({ type: 'counter/set', payload: { counter } });
+  if (username.startsWith('kick:')) {
+    server.kick(username.substring(5));
+  }
 });
 
+// TODO: make clear that these connect and disconnect have nothing to do with the actual WebSocket connection
 server.on('connect', (username: string) => {
   server.send(username, { type: 'counter/set', payload: { counter } });
 });
 
+// TODO: write test that disconnect is not called when someone leaves or is kicked
 server.on('disconnect', (username: string) => {
   counter[username] += 10;
   server.broadcast({ type: 'counter/set', payload: { counter } });
@@ -53,4 +61,5 @@ server.on('message', (username: string, message: AncientMessage) => {
   }
 });
 
+// TODO: allow to add a user to the server (that is disconnected)
 server.start(8082);
