@@ -1,0 +1,36 @@
+title Karman Server
+
+participant "Connection" as con
+participant "Server" as srv
+participant "Application" as app
+
+group joining
+con-->srv: <open>
+con-xcon: disconnect on anything \nelse than user/join
+loop until not rejected
+con->srv: user/join
+space -4
+srv->app: on(accept)
+space -2
+app->srv: can reject()
+space -4
+srv->con: user/reject
+end
+con<-srv: user/accept
+activate srv
+srv->app: on(join), on(link)
+space -4
+con<:4-srv: user/join, user/link
+end
+
+group custom messages
+con->srv: custom/message
+space -4
+srv->app: on(message)
+app->srv: send()
+space -4
+srv->con: custom/message
+app->srv: broadcast()
+space -4
+srv->con: custom/message
+end

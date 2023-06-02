@@ -4,16 +4,15 @@ import short from 'short-uuid';
 import { DateTime } from 'luxon';
 import { EventEmitter } from './event-emitter';
 
-// TODO: make types of KarmanServer be more unique to avoid accidental overlap with custom message types (?)
 export type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
 export type UserJoinMessage = { type: 'user/join', payload: { username: string } };
 export type UserRejectedMessage = { type: 'user/rejected', payload: { reason: string } };
 export type UserAcceptedMessage = { type: 'user/accepted' };
 export type UserLeaveMessage = { type: 'user/leave', payload: { username: string, reason: 'voluntary' | 'kicked' } };
-export type UserReconnectedMessage = { type: 'user/reconnected', payload: { username: string } };
-export type UserDisconnectedMessage = { type: 'user/disconnected', payload: { username: string } };
+export type UserLinkedMessage = { type: 'user/linked', payload: { username: string } };
+export type UserUnlinkedMessage = { type: 'user/unlinked', payload: { username: string } };
 export type KarmanServerMessage = SyntaxErrorMessage | UserJoinMessage | UserRejectedMessage | UserAcceptedMessage | UserLeaveMessage
-  | UserReconnectedMessage | UserDisconnectedMessage;
+  | UserLinkedMessage | UserUnlinkedMessage;
 export type UnknownMessage = { type: unknown };
 
 /**
@@ -40,9 +39,15 @@ export type KarmanServerProps = {
    */
   log?: KarmanServerLogger;
 
-  // TODO: explain what metadata is added
   /**
-   * Whether metadata should be added to sent and broadcast messages.
+   * Whether metadata should be added to sent and broadcast messages. If set to true, each message send or broadcast to users will include a
+   *  'metadata' field in the root of the json message including the timestamp it was sent and wether the message was a broadcast.
+   * Example message when metadata is set to true:
+   *  {
+   *    type: "custom/message",
+   *    payload: { value: 3 },
+   *    metadata: { isBroadcast: true, timestamp: "2023-04-07T20:11:11.432Z" },
+   *  }
    *
    * @default When not provided, metadata will not be added to messages.
    */
@@ -66,7 +71,7 @@ type KarmanServerEvents<TMessage> = {
    * This event is emitted every time a new user tries to join the server.
    *
    * @param username The username of the new user that is trying to join.
-   * @param reject A reject callback that, if invoked, will reject the user from the server with the provided reason.
+   * @param reject A reject callback that, if invoked, will reject the user from joining the server with the provided reason.
    */
   accept: [username: string, reject: (reason: string) => void];
 
@@ -78,22 +83,25 @@ type KarmanServerEvents<TMessage> = {
   join: [username: string];
 
   /**
-   * This event is emitted every time a user has connected to the server. In other words: the first time the users joins, but also everytime that user
-   *  reconnects.
-   * For example: You can use this to send the current state of the server to the client.
+   * This event is emitted every time a user is (re)linked to a connection. This is emitted when a user joins and everytime that a user reconnects.
+   * Note: When a user links, this could be with a different or the same connection as it was linked with before.
    *
-   * @param username The username of the user that connected.
+   * Example: You can use this to send the current state of the server to the user.
+   *
+   * @param username The username of the user that linked to a connection.
    */
-  connect: [username: string];
+  link: [username: string];
 
   /**
-   * This event is emitted every time a user has disconnected from the server without it indicating it was intending to leave.
+   * This event is emitted every time a user is no longer linked to a connection. This can happen when a user has disconnected from the server
+   *  without it indicating it wanted to leave. For example: due to a bad internet connection or accidental refresh of the webpage.
    *
-   * @param username The username of the user that disconnected.
+   * Example: You can use this to pause the game and wait for the user to be linked to a connection again.
+   *
+   * @param username The username of the user that unlinked from its connection.
    */
-  disconnect: [username: string];
+  unlink: [username: string];
 
-  // TODO: change reason to boolean isKicked
   /**
    * This event is emitted every time a user is about to leave the server.
    *
@@ -114,7 +122,8 @@ type KarmanServerEvents<TMessage> = {
 /**
  * The states of a Karman Server.
  *
- * @description *initializing*: The server is initializing, but has not yet been started. This allows you to configure callbacks for the server before it starts.
+ * @description *initializing*: The server is initializing, but has not yet been started. This allows you to configure callbacks for the server
+ *  before it starts.
  * @description *starting*: The start method of the server has been invoked, but the server is not yet running.
  * @description *running*: The server is running and accepting connections.
  * @description *stopping*: The stop method of the server has been invoked, but the server has not yet stopped.
@@ -122,8 +131,10 @@ type KarmanServerEvents<TMessage> = {
  */
 export type KarmanServerState = 'initializing' | 'starting' | 'running' | 'stopping' | 'stopped';
 
-/**<KarmanServerEvents<TMessage>>
- * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join and leave.
+// TODO: create sequence diagram with all flows (and make sure that the tests are including all these flows)
+/**
+ * KarmanServer is a websocket server that abstracts individual websocket connections into users that can join, leave, and interact by linking to
+ *  these connections.
  */
 export class KarmanServer<TMessage extends { type: string }> extends EventEmitter<KarmanServerEvents<TMessage>> {
   private readonly httpServer: http.Server;
@@ -179,8 +190,6 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         karmanServer.onRawDataReceived(
           data,
           connectionId,
-          karmanServer.connections[connectionId].username, // TODO: we don't have to send this along anymore now that username is in the connections object
-          (_username: string | undefined) => karmanServer.connections[connectionId].username = _username, // TODO: we don't have to send this along anymore now that username is in the connections object
           () => socket.close(),
           (message: KarmanServerMessage) => socket.send(JSON.stringify({
             ...message,
@@ -202,11 +211,10 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
   private onRawDataReceived(
     rawData: ws.RawData,
     connectionId: string,
-    username: string | undefined,
-    setUsername: (username: string | undefined) => void,
     close: () => void,
     send: (message: KarmanServerMessage) => void,
   ): void {
+    const { username } = this.connections[connectionId];
     const tryParse = (data: ws.RawData): KarmanServerMessage => {
       try {
         return JSON.parse(data.toString());
@@ -234,13 +242,13 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
       return;
     }
     if (
-      message.type === 'user/reconnected'
-      || message.type === 'user/disconnected'
+      message.type === 'user/linked'
+      || message.type === 'user/unlinked'
       || message.type === 'user/accepted'
       || message.type === 'user/rejected'
     ) {
       this.logger('warn', `connection immediately closed, since a '${message.type}' message was received ` +
-        `from '${username ?? connectionId}', while this is a message that should only be sent by the server to clients.`);
+        `from '${username ?? connectionId}', while this is a message that should only be sent by the server to users.`);
       close();
       return;
     }
@@ -256,12 +264,11 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
         }
         this.logger('info', `'${username}' left.`);
         const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username, reason: 'voluntary' } };
-        this.broadcast(leaveMessage);
+        this.broadcastServerMessage(leaveMessage);
         delete this.users[username];
         this.emit('leave', username, 'voluntary');
         close(); // TODO: do we really need to close the connection on a leave?
-        username = undefined;
-        setUsername(undefined);
+        this.connections[connectionId].username = undefined;
       } else {
         this.emit('message', username, message);
       }
@@ -282,21 +289,21 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
           if (otherUsername === username) {
             return;
           }
-          const message: UserDisconnectedMessage | UserReconnectedMessage = {
-            type: connectionId === undefined ? 'user/disconnected' : 'user/reconnected',
+          const message: UserUnlinkedMessage | UserLinkedMessage = {
+            type: connectionId === undefined ? 'user/unlinked' : 'user/linked',
             payload: { username: otherUsername },
           };
           send(message);
         });
         // If this is a new joiner, also emit for the new joiner
         if (isJoin) {
-          this.broadcast({ type: 'user/join', payload: { username } });
+          this.broadcastServerMessage({ type: 'user/join', payload: { username } });
           this.emit('join', username);
         } else {
-          this.broadcast({ type: 'user/reconnected', payload: { username } });
+          this.broadcastServerMessage({ type: 'user/linked', payload: { username } });
         }
-        // Emit connect event
-        this.emit('connect', username);
+        // Emit link event
+        this.emit('link', username);
       };
       if (this.users[message.payload.username] === undefined) {
         let rejectedReason: undefined | string;
@@ -312,18 +319,16 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
             + `connection '${connectionId}', since the ${rejectedMessage.payload.reason}.`);
           send(rejectedMessage);
         } else {
-          username = message.payload.username;
-          setUsername(message.payload.username);
+          this.connections[connectionId].username = message.payload.username;
           this.users[message.payload.username] = { connectionId };
-          this.logger('info', `'${username}' joined from connection '${connectionId}'.`);
-          sendWelcomeMessages(true, username);
+          this.logger('info', `'${message.payload.username}' joined from connection '${connectionId}'.`);
+          sendWelcomeMessages(true, message.payload.username);
         }
       } else if (this.users[message.payload.username].connectionId === undefined) {
-        username = message.payload.username;
-        setUsername(message.payload.username);
+        this.connections[connectionId].username = message.payload.username;
         this.users[message.payload.username].connectionId = connectionId;
-        this.logger('info', `'${username}' reconnected from connection '${connectionId}'.`);
-        sendWelcomeMessages(false, username);
+        this.logger('info', `'${message.payload.username}' reconnected from connection '${connectionId}'.`);
+        sendWelcomeMessages(false, message.payload.username);
       } else {
         const rejectedMessage: UserRejectedMessage = {
           type: 'user/rejected',
@@ -361,12 +366,12 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     } else {
       this.users[username].connectionId = undefined;
       try {
-        this.broadcast({ type: 'user/disconnected', payload: { username } });
+        this.broadcastServerMessage({ type: 'user/unlinked', payload: { username } });
       } catch (e) {
         this.logger('debug', `broadcasting failed while '${username}' disconnected, due too ${e}.`);
       }
       this.logger('info', `'${username}' disconnected.`);
-      this.emit('disconnect', username);
+      this.emit('unlink', username);
     }
   }
 
@@ -431,7 +436,13 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     } : undefined;
   }
 
-  // TODO: public method signature should not include KarmanServerMessage
+  /**
+   * Broadcasts a server message to all users. (alias for KarmanServer.broadcast())
+   */
+  private broadcastServerMessage(message: KarmanServerMessage, skipUsername?: string): number {
+    return this.broadcast(message as TMessage, skipUsername);
+  }
+
   /**
    * Broadcasts a message to all users, that are currently connected to the server.
    *
@@ -440,7 +451,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    *
    * @returns Returns the number of users this message is sent to.
    */
-  public broadcast(message: TMessage | KarmanServerMessage, skipUsername?: string): number {
+  public broadcast(message: TMessage, skipUsername?: string): number {
     if (this.state !== 'running') {
       throw new Error('Cannot broadcast a message if the server is not running.');
     }
@@ -460,7 +471,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
    * @param username The username of the user to send the message to.
    * @param message The message to send to the user.
    *
-   * @returns Returns whether the message is sent to the client. This is false if the user is not connected to the server.
+   * @returns Returns whether the message is sent to the user. This is false if the user is not connected to the server.
    */
   public send(username: string, message: TMessage): boolean {
     if (this.state !== 'running') {
@@ -472,7 +483,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
     }
     const { connectionId } = user;
     if (connectionId === undefined) {
-      this.logger('warn', `can not send message to '${username}' as that user is not connected.`);
+      this.logger('warn', `can not send message to '${username}' as that user is not linked to a connection.`);
       return false;
     }
     const connection = this.connections[connectionId];
@@ -501,7 +512,7 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
 
     this.logger('info', `'${username}' kicked.`);
     const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username, reason: 'kicked' } };
-    this.broadcast(leaveMessage);
+    this.broadcastServerMessage(leaveMessage);
     delete this.users[username];
     this.emit('leave', username, 'kicked');
     const { connectionId } = user;

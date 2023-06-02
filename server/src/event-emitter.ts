@@ -5,7 +5,7 @@
 type Listener<T extends Array<unknown>> = (...args: T) => void;
 
 /**
- * An abstract type safe event emitter with a protected emit method that doesn't allow subscriptions or emits while emitting.
+ * An abstract type safe event emitter with a protected emit method that doesn't allow subscriptions while emitting.
  */
 export abstract class EventEmitter<EventMap extends Record<string, Array<unknown>>> {
   private eventListeners: {
@@ -31,8 +31,6 @@ export abstract class EventEmitter<EventMap extends Record<string, Array<unknown
         listener(...args);
       } catch (e: unknown) {
         errors.push(e);
-        // TODO: go through all emits and do something with the result. Log maybe?
-        //  for now log all errors in emitters
         console.error(`[error] [event-emitter] [${String(eventName)}]`, e);
       }
     }

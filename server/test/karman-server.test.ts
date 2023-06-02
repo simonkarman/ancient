@@ -3,10 +3,10 @@ import {
   KarmanServerMessage,
   KarmanServerState,
   UserAcceptedMessage,
-  UserDisconnectedMessage,
+  UserUnlinkedMessage,
   UserJoinMessage,
   UserLeaveMessage,
-  UserReconnectedMessage, UserRejectedMessage,
+  UserLinkedMessage, UserRejectedMessage,
 } from '../src/karman-server';
 import { sleep, withCustomServer, withServer } from './test-utils';
 
@@ -44,8 +44,8 @@ describe('Karman Server', () => {
   });
 
   it('should add metadata to log messages when KarmanServer is constructed with metadata=true',
-    withCustomServer(new KarmanServer({ metadata: true }), async({ server, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
+    withCustomServer(new KarmanServer({ metadata: true }), async({ server, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
       await sleep();
       for (let callIndex = 0; callIndex < simonEmit.message.mock.calls.length; callIndex++) {
         const call = simonEmit.message.mock.calls[callIndex];
@@ -85,8 +85,8 @@ describe('Karman Server', () => {
   );
 
   it('should accept a user joining with a valid join message',
-    withServer(async ({ serverEmit, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
+    withServer(async ({ serverEmit, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
       await sleep();
       expect(simonEmit.message).toHaveBeenCalledWith<[UserAcceptedMessage]>({ type: 'user/accepted' });
       expect(serverEmit.accept).toHaveBeenCalledWith('simon', expect.any(Function));
@@ -95,11 +95,11 @@ describe('Karman Server', () => {
   );
 
   it('should immediately close a connection when it sends an invalid join message',
-    withServer(async ({ addClient, scenario }) => {
-      const [client, clientEmit] = await addClient();
-      client.send(JSON.stringify(scenario.value));
+    withServer(async ({ addUser, scenario }) => {
+      const [user, userEmit] = await addUser();
+      user.send(JSON.stringify(scenario.value));
       await sleep();
-      expect(clientEmit.close).toHaveBeenCalled();
+      expect(userEmit.close).toHaveBeenCalled();
     }, [
       { type: 'user/join', payload: { missing: 'incorrect' } },
       { type: 'user/join', payload: 3 },
@@ -108,8 +108,8 @@ describe('Karman Server', () => {
   );
 
   it('should immediately close a connection when it sends a join message when already joined',
-    withServer(async ({ addClient }) => {
-      const [simon, simonEmit] = await addClient('simon');
+    withServer(async ({ addUser }) => {
+      const [simon, simonEmit] = await addUser('simon');
       const joinMessage = { type: 'user/join', payload: { username: 'simon' } };
       simon.send(JSON.stringify(joinMessage));
       await sleep();
@@ -118,113 +118,115 @@ describe('Karman Server', () => {
   );
 
   it('should allow a connection to leave even before it joined',
-    withServer(async ({ addClient }) => {
-      const [client, clientEmit] = await addClient();
+    withServer(async ({ addUser }) => {
+      const [user, userEmit] = await addUser();
       const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'not-important', reason: 'voluntary' } }; // TODO: payload here is weird
-      client.send(JSON.stringify(leaveMessage));
+      user.send(JSON.stringify(leaveMessage));
       await sleep();
-      expect(clientEmit.close).toHaveBeenCalled();
+      expect(userEmit.close).toHaveBeenCalled();
     }),
   );
 
   it('should immediately close a connection when any custom message is sent before joining',
-    withServer(async ({ addClient, serverEmit }) => {
-      const [client, clientEmit] = await addClient();
+    withServer(async ({ addUser, serverEmit }) => {
+      const [user, userEmit] = await addUser();
       const customMessage = { type: 'custom/something' };
-      client.send(JSON.stringify(customMessage));
+      user.send(JSON.stringify(customMessage));
       await sleep();
-      expect(clientEmit.close).toHaveBeenCalled();
+      expect(userEmit.close).toHaveBeenCalled();
       expect(serverEmit.message).not.toHaveBeenCalled();
     }),
   );
 
   it('should reject a user joining with a username that is already taken',
-    withServer(async ({ addClient }) => {
-      await addClient('simon');
-      await addClient('lisa');
-      await expect(addClient('simon')).rejects.toStrictEqual('username simon is already taken');
+    withServer(async ({ addUser }) => {
+      await addUser('simon');
+      await addUser('lisa');
+      await expect(addUser('simon')).rejects.toStrictEqual('username simon is already taken');
     }),
   );
 
-  it('should immediately disconnect a client if it sends a message with unknown format',
-    withServer(async({ serverEmit, addClient }) => {
+  it('should immediately disconnect a user if it sends a message with unknown format',
+    withServer(async({ serverEmit, addUser }) => {
       const messages = ['', 'this-is-not-a-json-message', '{}', '{"type":3}', '{"type":{"key":"value"}}'];
-      messages.forEach((message, index) => addClient(`simon-${index}`).then(([client]) => {
-        client.send(message);
+      messages.forEach((message, index) => addUser(`simon-${index}`).then(([user]) => {
+        user.send(message);
       }));
       await sleep();
       messages.forEach((_, index) => {
-        expect(serverEmit.disconnect).toHaveBeenCalledWith(`simon-${index}`);
+        expect(serverEmit.unlink).toHaveBeenCalledWith(`simon-${index}`);
       });
     }),
   );
 
   it('should immediately disconnect a connection if it sends a message with unknown format',
-    withServer(async({ serverEmit, addClient }) => {
+    withServer(async({ serverEmit, addUser }) => {
       const messages = ['', 'this-is-not-a-json-message', '{}', '{"type":3}', '{"type":{"key":"value"}}'];
-      const clientEmits = await Promise.all(messages.map(async (message) => {
-        const [client, clientEmit] = await addClient();
-        client.send(message);
-        return clientEmit;
+      const userEmits = await Promise.all(messages.map(async (message) => {
+        const [user, userEmit] = await addUser();
+        user.send(message);
+        return userEmit;
       }));
       await sleep();
-      clientEmits.forEach((client) => {
-        expect(client.close).toHaveBeenCalled();
+      userEmits.forEach((user) => {
+        expect(user.close).toHaveBeenCalled();
       });
     }),
   );
 
-  it('should immediately disconnect a client if it sends a server only message',
-    withServer(async({ serverEmit, addClient }) => {
+  // TODO: unlink instead of close connection should be implemented
+  it('should immediately unlink a user if it sends a server only message',
+    withServer(async({ serverEmit, addUser }) => {
       const messages: KarmanServerMessage[] = [
-        { type: 'user/reconnected', payload: { username: 'any' } },
-        { type: 'user/disconnected', payload: { username: 'any' } },
+        { type: 'user/linked', payload: { username: 'any' } },
+        { type: 'user/unlinked', payload: { username: 'any' } },
         { type: 'user/accepted' },
         { type: 'user/rejected', payload: { reason: 'any' } },
       ];
-      messages.forEach((message, index) => addClient(`simon-${index}`).then(([client]) => {
-        client.send(JSON.stringify(message));
+      messages.forEach((message, index) => addUser(`simon-${index}`).then(([user]) => {
+        user.send(JSON.stringify(message));
       }));
       await sleep();
       messages.forEach((_, index) => {
-        expect(serverEmit.disconnect).toHaveBeenCalledWith(`simon-${index}`);
+        expect(serverEmit.unlink).toHaveBeenCalledWith(`simon-${index}`);
       });
     }),
   );
 
-  it('should immediately disconnect a connection if it sends a server only message',
-    withServer(async({ serverEmit, addClient }) => {
+  // TODO: unlink instead of close connection should be implemented
+  it('should immediately unlink a connection if it sends a server only message',
+    withServer(async({ addUser }) => {
       const messages: KarmanServerMessage[] = [
-        { type: 'user/reconnected', payload: { username: 'any' } },
-        { type: 'user/disconnected', payload: { username: 'any' } },
+        { type: 'user/linked', payload: { username: 'any' } },
+        { type: 'user/unlinked', payload: { username: 'any' } },
         { type: 'user/accepted' },
         { type: 'user/rejected', payload: { reason: 'any' } },
       ];
-      const clientEmits = await Promise.all(messages.map(async (message) => {
-        const [client, clientEmit] = await addClient();
-        client.send(JSON.stringify(message));
-        return clientEmit;
+      const userEmits = await Promise.all(messages.map(async (message) => {
+        const [user, userEmit] = await addUser();
+        user.send(JSON.stringify(message));
+        return userEmit;
       }));
       await sleep();
-      clientEmits.forEach((client) => {
-        expect(client.close).toHaveBeenCalled();
+      userEmits.forEach((user) => {
+        expect(user.close).toHaveBeenCalled();
       });
     }),
   );
 
-  it('should allow a user to reconnect after it has disconnected',
-    withServer(async({ serverEmit, addClient }) => {
-      const [simon] = await addClient('simon');
+  it('should allow a user to link to a new connection after the connection was lost',
+    withServer(async({ addUser }) => {
+      const [simon] = await addUser('simon');
       await sleep();
       simon.close();
       await sleep();
-      await addClient('simon');
+      await addUser('simon');
     }),
   );
 
-  it('should emit the message and sender if it receives a custom message from a client',
-    withServer<{ type: 'custom', payload: { key: string } }, never>(async({ serverEmit, addClient }) => {
-      const [simon] = await addClient('simon');
+  it('should emit the message and sender if it receives a custom message from a user',
+    withServer<{ type: 'custom', payload: { key: string } }, never>(async({ serverEmit, addUser }) => {
+      const [simon] = await addUser('simon');
       const customMessage = { type: 'custom', payload: { key: 'value' } };
       simon.send(JSON.stringify(customMessage));
       await sleep();
@@ -232,11 +234,12 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should inform all clients when a client joins',
-    withServer(async({ addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      await addClient('lisa');
+  it('should inform all users when a user joins',
+    withServer(async({ addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      await addUser('lisa');
       await sleep();
+      // TODO: also expect an link event
       expect(simonEmit.message).toHaveBeenCalledWith<[UserJoinMessage]>({
         type: 'user/join',
         payload: { username: 'lisa' },
@@ -244,24 +247,24 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should welcome a client that joins with information about all users',
-    withServer(async({ server, addClient }) => {
-      await addClient('simon');
-      const [lisa] = await addClient('lisa');
+  it('should welcome a user that joins by sending the new user information about all users',
+    withServer(async({ server, addUser }) => {
+      await addUser('simon');
+      const [lisa] = await addUser('lisa');
       await sleep();
       lisa.close();
       await sleep();
-      const [, marjoleinEmit] = await addClient('marjolein');
+      const [, marjoleinEmit] = await addUser('marjolein');
       await sleep();
       expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserAcceptedMessage]>({
         type: 'user/accepted',
       });
-      expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserReconnectedMessage]>({
-        type: 'user/reconnected',
+      expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserLinkedMessage]>({
+        type: 'user/linked',
         payload: { username: 'simon' },
       });
-      expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserDisconnectedMessage]>({
-        type: 'user/disconnected',
+      expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserUnlinkedMessage]>({
+        type: 'user/unlinked',
         payload: { username: 'lisa' },
       });
       expect(marjoleinEmit.message).toHaveBeenCalledWith<[UserJoinMessage]>({
@@ -278,14 +281,15 @@ describe('Karman Server', () => {
   );
 
   it(
-    'should disconnect a client and inform other clients when a client identifies it wants to leave',
-    withServer(async({ server, serverEmit, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [lisa, lisaEmit] = await addClient('lisa');
+    'should let a user leave the server and inform other user that the user left',
+    withServer(async({ server, serverEmit, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [lisa, lisaEmit] = await addUser('lisa');
       await sleep();
       const leaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa', reason: 'voluntary' } }; // TODO: should not have to sent reason
       lisa.send(JSON.stringify(leaveMessage));
       await sleep();
+      // TODO: expect an unlink event too (this has to be added)
       expect(simonEmit.message).toHaveBeenCalledWith(leaveMessage);
       expect(serverEmit.leave).toHaveBeenCalledWith('lisa', 'voluntary');
       expect(lisaEmit.close).toBeCalled();
@@ -296,10 +300,10 @@ describe('Karman Server', () => {
   );
 
   it(
-    'should not allow a client to send a leave of another client',
-    withServer(async({ server, serverEmit, addClient }) => {
-      const [simon] = await addClient('simon');
-      const [, lisaEmit] = await addClient('lisa');
+    'should not allow a user to send a leave of another user',
+    withServer(async({ server, serverEmit, addUser }) => {
+      const [simon] = await addUser('simon');
+      const [, lisaEmit] = await addUser('lisa');
       await sleep();
       const lisaLeaveMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'lisa', reason: 'voluntary' } }; // TODO: should not have to sent reason
       simon.send(JSON.stringify(lisaLeaveMessage));
@@ -309,28 +313,27 @@ describe('Karman Server', () => {
   );
 
   it(
-    'should not allow a client to send a leave without payload',
-    withServer(async({ server, serverEmit, addClient }) => {
-      const [simon] = await addClient('simon');
-      const [, lisaEmit] = await addClient('lisa');
+    'should not allow a user to send a leave without payload',
+    withServer(async({ addUser }) => {
+      const [simon, simonEmit] = await addUser('simon');
       await sleep();
       const leaveMessageWithoutPayload = { type: 'user/leave' };
       simon.send(JSON.stringify(leaveMessageWithoutPayload));
       await sleep();
-      expect(lisaEmit.close).not.toHaveBeenCalled();
+      expect(simonEmit.close).not.toHaveBeenCalled();
     }),
   );
 
-  it('should inform all clients when a client disconnects',
-    withServer(async({ server, serverEmit, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [lisa] = await addClient('lisa');
+  it('should inform all users when a user is unlinked from a connection',
+    withServer(async({ server, serverEmit, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [lisa] = await addUser('lisa');
       await sleep();
       lisa.close();
       await sleep();
-      expect(serverEmit.disconnect).toHaveBeenCalledWith('lisa');
-      expect(simonEmit.message).toHaveBeenCalledWith<[UserDisconnectedMessage]>({
-        type: 'user/disconnected',
+      expect(serverEmit.unlink).toHaveBeenCalledWith('lisa');
+      expect(simonEmit.message).toHaveBeenCalledWith<[UserUnlinkedMessage]>({
+        type: 'user/unlinked',
         payload: { username: 'lisa' },
       });
       expect(server.getUsers()).toStrictEqual<ReturnType<KarmanServer<KarmanServerMessage>['getUsers']>>([
@@ -340,19 +343,19 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should inform all clients when a client reconnects',
-    withServer(async({ serverEmit, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [lisa] = await addClient('lisa');
+  it('should inform all users when a user is linked to a connection',
+    withServer(async({ serverEmit, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [lisa] = await addUser('lisa');
       await sleep();
       lisa.close();
       await sleep();
-      serverEmit.connect.mockReset();
-      await addClient('lisa');
+      serverEmit.link.mockReset();
+      await addUser('lisa');
       await sleep();
-      expect(serverEmit.connect).toHaveBeenCalledWith('lisa');
-      expect(simonEmit.message).toHaveBeenCalledWith<[UserReconnectedMessage]>({
-        type: 'user/reconnected',
+      expect(serverEmit.link).toHaveBeenCalledWith('lisa');
+      expect(simonEmit.message).toHaveBeenCalledWith<[UserLinkedMessage]>({
+        type: 'user/linked',
         payload: { username: 'lisa' },
       });
     }),
@@ -372,27 +375,27 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should return false when sending a message to a user that is not connected',
-    withServer(async ({ server, addClient }) => {
-      const [simon] = await addClient('simon');
+  it('should return false when sending a message to a user that is not linked to a connection',
+    withServer(async ({ server, addUser }) => {
+      const [simon] = await addUser('simon');
       simon.close();
       await sleep();
       expect(server.send('simon', { type: 'custom/hello' })).toBe(false);
     }),
   );
 
-  it('should return true when sending a message to a user that is successful',
-    withServer(async ({ server, addClient }) => {
-      await addClient('simon');
+  it('should return true when sending a message to a user is successful',
+    withServer(async ({ server, addUser }) => {
+      await addUser('simon');
       expect(server.send('simon', { type: 'custom/hello' })).toBe(true);
     }),
   );
 
-  it('should return the number of users a message was broadcast to',
-    withServer(async ({ server, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [lisa] = await addClient('lisa');
-      const [, marjoleinEmit] = await addClient('marjolein');
+  it('should, when broadcasting, return the number of users a message was broadcast to',
+    withServer(async ({ server, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [lisa] = await addUser('lisa');
+      const [, marjoleinEmit] = await addUser('marjolein');
       lisa.close();
       await sleep();
       expect(server.broadcast({ type: 'custom/hello' })).toBe(2);
@@ -403,8 +406,8 @@ describe('Karman Server', () => {
   );
 
   (['send', 'broadcast'] as const).forEach(methodName => {
-    it(`should allow ${methodName}ing a message to the newly connected user in the on join and on connect hook`,
-      withServer(async ({ server, addClient }) => {
+    it(`should allow ${methodName}ing a message to the newly joined user in the on join and on connect hook`,
+      withServer(async ({ server, addUser }) => {
         server.on('join', (username: string) => {
           if (methodName === 'send') {
             server.send(username, { type: 'custom/welcome-on-join' });
@@ -412,26 +415,26 @@ describe('Karman Server', () => {
             server.broadcast({ type: 'custom/welcome-on-join' });
           }
         });
-        server.on('connect', (username: string) => {
+        server.on('link', (username: string) => {
           if (methodName === 'send') {
-            server.send(username, { type: 'custom/welcome-on-connect' });
+            server.send(username, { type: 'custom/welcome-on-link' });
           } else {
-            server.broadcast({ type: 'custom/welcome-on-connect' });
+            server.broadcast({ type: 'custom/welcome-on-link' });
           }
         });
-        const [, simonEmit] = await addClient('simon');
+        const [, simonEmit] = await addUser('simon');
         await sleep();
         const numberOfMessages = simonEmit.message.mock.calls.length;
         expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages - 1, { type: 'custom/welcome-on-join' });
-        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages, { type: 'custom/welcome-on-connect' });
+        expect(simonEmit.message).toHaveBeenNthCalledWith(numberOfMessages, { type: 'custom/welcome-on-link' });
       }),
     );
   });
 
   it('should skip broadcasting a message to a user if skipUsername is provided',
-    withServer(async ({ server, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [, lisaEmit] = await addClient('lisa');
+    withServer(async ({ server, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [, lisaEmit] = await addUser('lisa');
       await sleep();
       expect(server.broadcast({ type: 'custom/hello' }, 'simon')).toBe(1);
       await sleep();
@@ -440,57 +443,57 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should allow a connection to connect correctly after it was rejected before',
-    withServer(async ({ server, addClient }) => {
-      await addClient('simon');
-      const [client, clientEmit] = await addClient();
+  it('should allow a connection to link correctly after it was rejected before',
+    withServer(async ({ server, addUser }) => {
+      await addUser('simon');
+      const [user, userEmit] = await addUser();
       await sleep();
       const joinMessage: UserJoinMessage = { type: 'user/join', payload: { username: 'simon' } };
-      client.send(JSON.stringify(joinMessage));
+      user.send(JSON.stringify(joinMessage));
       await sleep();
       const rejectMessage: UserRejectedMessage = { type: 'user/rejected', payload: { reason: 'username simon is already taken' } };
-      expect(clientEmit.message).toHaveBeenCalledWith(rejectMessage);
+      expect(userEmit.message).toHaveBeenCalledWith(rejectMessage);
       joinMessage.payload.username = 'lisa';
-      client.send(JSON.stringify(joinMessage));
+      user.send(JSON.stringify(joinMessage));
       await sleep();
       const acceptMessage: UserAcceptedMessage = { type: 'user/accepted' };
-      expect(clientEmit.message).toHaveBeenCalledWith(acceptMessage);
+      expect(userEmit.message).toHaveBeenCalledWith(acceptMessage);
     }),
   );
 
-  it('should reject a new user if the reject callback in the accept hook is called with a reason',
-    withServer(async ({ server, serverEmit, addClient }) => {
+  it('should reject linking a connection to a user, if the reject callback in the accept hook is called with a reason',
+    withServer(async ({ server, serverEmit, addUser }) => {
       server.on('accept', (username: string, reject: (reason: string) => void) => {
         if (server.getUsers().length >= 1) {
           reject('server is full');
         }
       });
-      await addClient('simon');
-      await expect(addClient('lisa')).rejects.toBe('server is full');
-      await expect(addClient('marjolein')).rejects.toBe('server is full');
+      await addUser('simon');
+      await expect(addUser('lisa')).rejects.toBe('server is full');
+      await expect(addUser('marjolein')).rejects.toBe('server is full');
       expect(serverEmit.accept).toHaveBeenCalledTimes(3);
       expect(serverEmit.join).toHaveBeenCalledTimes(1);
     }),
   );
 
-  it('should not reject a user if it is reconnecting',
-    withServer(async ({ server, serverEmit, addClient }) => {
+  it('should not reject a connection if it is trying to link to an existing user',
+    withServer(async ({ server, serverEmit, addUser }) => {
       server.on('accept', (username: string, reject: (reason: string) => void) => {
         if (server.getUsers().length >= 1) {
           reject('server is full');
         }
       });
-      const [client] = await addClient('simon');
-      client.close();
-      await addClient('simon');
+      const [user] = await addUser('simon');
+      user.close();
+      await addUser('simon');
       expect(serverEmit.accept).toHaveBeenCalledTimes(1);
     }),
   );
 
-  it('should be able to kick a user from the server',
-    withServer(async ({ server, serverEmit, addClient }) => {
-      const [, simonEmit] = await addClient('simon');
-      const [, lisaEmit] = await addClient('lisa');
+  it('should be able to kick a linked user from the server',
+    withServer(async ({ server, serverEmit, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      const [, lisaEmit] = await addUser('lisa');
       server.kick('simon');
       await sleep();
       const kickMessage: UserLeaveMessage = { type: 'user/leave', payload: { username: 'simon', reason: 'kicked' } };
@@ -505,9 +508,9 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should be able to kick a disconnected user from the server',
-    withServer(async ({ server, serverEmit, addClient }) => {
-      const [simon] = await addClient('simon');
+  it('should be able to kick an unlinked user from the server',
+    withServer(async ({ server, serverEmit, addUser }) => {
+      const [simon] = await addUser('simon');
       simon.close();
       await sleep();
       server.kick('simon');

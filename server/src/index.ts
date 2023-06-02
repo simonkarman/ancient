@@ -33,13 +33,12 @@ server.on('join', (username: string) => {
   }
 });
 
-// TODO: make clear that these connect and disconnect have nothing to do with the actual WebSocket connection
-server.on('connect', (username: string) => {
+server.on('link', (username: string) => {
   server.send(username, { type: 'counter/set', payload: { counter } });
 });
 
-// TODO: write test that disconnect is not called when someone leaves or is kicked
-server.on('disconnect', (username: string) => {
+// TODO: write test that unlink is not called when someone leaves or is kicked
+server.on('unlink', (username: string) => {
   counter[username] += 10;
   server.broadcast({ type: 'counter/set', payload: { counter } });
 });
@@ -61,5 +60,5 @@ server.on('message', (username: string, message: AncientMessage) => {
   }
 });
 
-// TODO: allow to add a user to the server (that is disconnected)
+// TODO: allow to add an unlinked user to the server
 server.start(8082);
