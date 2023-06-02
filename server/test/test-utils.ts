@@ -25,8 +25,16 @@ export function withServer<TMessage extends { type: string }, TScenario>(callbac
   addClient: (username?: string) => Promise<[client: ws.WebSocket, clientEmit: ClientEmit]>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
+  return withCustomServer(new KarmanServer<TMessage>(), callback, scenarios);
+}
+
+export function withCustomServer<TMessage extends { type: string }, TScenario>(server: KarmanServer<TMessage>, callback: (props: {
+  server: KarmanServer<TMessage>,
+  serverEmit: ServerEmit<TMessage>,
+  addClient: (username?: string) => Promise<[client: ws.WebSocket, clientEmit: ClientEmit]>,
+  scenario: { index: number, value: TScenario },
+}) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return async () => {
-    const server = new KarmanServer<TMessage>();
     const serverEmit: ServerEmit<TMessage> = {
       start: jest.fn(),
       stop: jest.fn(),

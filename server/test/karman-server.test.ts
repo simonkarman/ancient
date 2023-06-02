@@ -8,7 +8,7 @@ import {
   UserLeaveMessage,
   UserReconnectedMessage, UserRejectedMessage,
 } from '../src/karman-server';
-import { sleep, withServer } from './test-utils';
+import { sleep, withCustomServer, withServer } from './test-utils';
 
 describe('Karman Server', () => {
   it('should cycle through all server statuses when starting and stopping', async () => {
@@ -42,6 +42,31 @@ describe('Karman Server', () => {
     server.stop();
     expect(log).toHaveBeenCalledWith('info', expect.any(String));
   });
+
+  it('should add metadata to log messages when KarmanServer is constructed with metadata=true',
+    withCustomServer(new KarmanServer({ metadata: true }), async({ server, addClient }) => {
+      const [, simonEmit] = await addClient('simon');
+      await sleep();
+      for (let callIndex = 0; callIndex < simonEmit.message.mock.calls.length; callIndex++) {
+        const call = simonEmit.message.mock.calls[callIndex];
+        expect(call[0]).toHaveProperty('metadata', { timestamp: expect.any(String), isBroadcast: expect.any(Boolean) });
+      }
+
+      // broadcast
+      simonEmit.message.mockClear();
+      server.broadcast({ type: 'custom/message' });
+      await sleep();
+      expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: true } });
+      expect(simonEmit.message).toHaveBeenCalledTimes(1);
+
+      // send
+      simonEmit.message.mockClear();
+      server.send('simon', { type: 'custom/message' });
+      await sleep();
+      expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: false } });
+      expect(simonEmit.message).toHaveBeenCalledTimes(1);
+    }),
+  );
 
   it('should not be allowed to stop a server that is not running', async () => {
     const karmanServer = new KarmanServer();
@@ -480,12 +505,21 @@ describe('Karman Server', () => {
     }),
   );
 
+  it('should be able to kick a disconnected user from the server',
+    withServer(async ({ server, serverEmit, addClient }) => {
+      const [simon] = await addClient('simon');
+      simon.close();
+      await sleep();
+      server.kick('simon');
+      await sleep();
+      expect(serverEmit.leave).toHaveBeenCalledWith('simon', 'kicked');
+      expect(server.getUsers()).toStrictEqual<ReturnType<KarmanServer<KarmanServerMessage>['getUsers']>>([]);
+    }),
+  );
+
   it('should not allow kicking a user, if that user does not exist',
     withServer(async ({ server }) => {
       expect(() => server.kick('simon')).toThrow('Can not kick \'simon\' as there is no user with that username.');
     }),
   );
-
-  // TODO: should be able to kick a >disconnected< user from the server
-  // TODO: add test for metadata property
 });
