@@ -27,7 +27,7 @@ const WebSocketProvider: FC<PropsWithChildren<{
   const rejectionReason = useAppSelector(selectRejectionReason);
 
   useEffect(() => {
-    const socket = new WebSocket('ws://192.168.1.108:8082');
+    const socket = new WebSocket('ws://localhost:8082');
 
     socket.onopen = () => {
       setConnection('connected');
@@ -48,7 +48,7 @@ const WebSocketProvider: FC<PropsWithChildren<{
       socket.close();
     };
   }, [dispatch, props]);
-  // TODO: should not be based on connection, but based on state of negotiation with server (accept, reject, join, leave, ...)
+  // TODO: logic should not be based on connection, but based on state of negotiation with server (accept, reject, join, leave, ...)
   return (
     <WebSocketContext.Provider value={[props.username, ws.current?.send.bind(ws.current)]}>
       {connection === 'connecting' && <p>
@@ -125,7 +125,7 @@ function Ancient() {
             {' '}
           (is
             {' '}
-            {user.isConnected ? 'online' : 'offline'}
+            {user.isLinked ? 'online' : 'offline'}
           )
           </li>,
         )}

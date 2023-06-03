@@ -1,0 +1,75 @@
+title ws-kar
+
+actor "Client" as client
+participant "Server" as server
+participant "Server Logic" as backend
+
+group join
+client-->server: <open>
+server-xclient: server will close connection on anything else than user/authenticate\nor when too long (in time and attempts) before authenticated
+loop connection remains open and unlinked until authentication is accepted
+client->server: user/authenticate
+space -4
+server->backend: on(authenticate: username, is new user, auth details, rejectCallback)
+space -2
+backend->server: reject(reason)
+space -4
+server->client: user/rejected
+end
+client<-server: user/accepted
+group only if new user
+server->backend: on(join: username)
+activate server
+space -3.5
+client<:4-server: user/joined
+end
+server->backend: on(link: username)
+activate server
+space -3.5
+client<:4-server: user/linked
+end
+
+group custom appication logic
+client->server: custom/from-connection-message
+space -4
+server->backend: on(message: username from-connection-message)
+backend->server: send(from-server-message)
+space -4
+server->client: custom/from-server-message
+backend->server: broadcast(from-server-message)
+space -4
+server->client: custom/from-server-message
+end
+
+group unlink
+client-->server: <close>
+client->server: on user/unlink (or any invalid format or user/authenticate\nwhen already accepted or any from-server message)
+space-4
+backend->server: unlink(username)
+server->client: user/rejected
+space -3
+server->backend: on(unlink: username)
+space -4
+server-:4>client: user/unlinked
+deactivate server
+end
+
+space
+activate server
+group leave
+client->server: user/leave
+space -4
+backend->server: leave(username) or kick(username)
+space -2
+server-:4>client: user/unlinked
+deactivate server
+server-:4>client: user/left
+deactivate server
+end
+
+group server side join (unlinked)
+backend->server: join(username, auth details)
+activate server
+space -3.5
+client<:4-server: user/joined
+end

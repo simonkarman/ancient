@@ -5,7 +5,7 @@ import type { RootState } from './store';
 type UserState = {
   isAccepted: boolean;
   rejectionReason: string | undefined;
-  users: { [username: string]: { isConnected: boolean}};
+  users: { [username: string]: { isLinked: boolean}};
   latestLeaveReason: string | undefined;
 }
 const initialState: UserState = {
@@ -15,7 +15,7 @@ const initialState: UserState = {
   latestLeaveReason: undefined,
 };
 
-const newUser = () => ({ isConnected: true });
+const newUser = () => ({ isLinked: true });
 
 const userSlice = createSlice({
   name: 'user',
@@ -41,19 +41,19 @@ const userSlice = createSlice({
       state.latestLeaveReason = `User '${action.payload.username}' left the server${leaveReason}.`;
       delete state.users[action.payload.username];
     },
-    disconnected: (state, action: PayloadAction<{ username: string }>) => {
+    unlinked: (state, action: PayloadAction<{ username: string }>) => {
       const username = action?.payload?.username;
       if (state.users[username] === undefined) {
         state.users[username] = newUser();
       }
-      state.users[username].isConnected = false;
+      state.users[username].isLinked = false;
     },
-    reconnected: (state, action: PayloadAction<{ username: string }>) => {
+    linked: (state, action: PayloadAction<{ username: string }>) => {
       const username = action?.payload?.username;
       if (state.users[username] === undefined) {
         state.users[username] = newUser();
       }
-      state.users[username].isConnected = true;
+      state.users[username].isLinked = true;
     },
   },
 });
