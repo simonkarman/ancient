@@ -1,0 +1,21 @@
+import { Server } from './index';
+
+export const monitorUsers = (server: Server) => {
+  let counter = 0;
+  const printUsers = () => {
+    counter += 1;
+    const count = counter;
+    setTimeout(() => {
+      if (count !== counter) {
+        return;
+      }
+      const users = server.getUsers();
+      const userInfo = users.map(({ username, isLinked }) => `${username}${isLinked ? '' : ' (offline)'}`);
+      console.debug('[debug] [ancient]', users.length, 'user(s):', userInfo);
+    }, 100);
+  };
+  server.on('join', printUsers);
+  server.on('link', printUsers);
+  server.on('unlink', printUsers);
+  server.on('leave', printUsers);
+};

@@ -361,11 +361,11 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should not allow send, broadcast, or kick if the server is not running', async () => {
+  it('should not allow send, broadcast, or leave if the server is not running', async () => {
     const karmanServer = new KarmanServer();
     expect(() => karmanServer.send('simon', { type: 'custom/hello' })).toThrow('Cannot send a message if the server is not running.');
     expect(() => karmanServer.broadcast({ type: 'custom/hello' })).toThrow('Cannot broadcast a message if the server is not running.');
-    expect(() => karmanServer.kick('simon')).toThrow('Cannot kick a user if the server is not running.');
+    expect(() => karmanServer.kick('simon')).toThrow('Cannot leave a user if the server is not running.');
   });
 
   it('should not allow sending a message to a user, if that user does not exist',
@@ -490,7 +490,7 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should be able to kick a linked user from the server',
+  it('should be able to leave a linked user from the server',
     withServer(async ({ server, serverEmit, addUser }) => {
       const [, simonEmit] = await addUser('simon');
       const [, lisaEmit] = await addUser('lisa');
@@ -508,7 +508,7 @@ describe('Karman Server', () => {
     }),
   );
 
-  it('should be able to kick an unlinked user from the server',
+  it('should be able to leave an unlinked user from the server',
     withServer(async ({ server, serverEmit, addUser }) => {
       const [simon] = await addUser('simon');
       simon.close();

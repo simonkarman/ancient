@@ -2,7 +2,7 @@ import ws, { AddressInfo } from 'ws';
 import http from 'http';
 import short from 'short-uuid';
 import { DateTime } from 'luxon';
-import { EventEmitter } from './event-emitter';
+import { EventEmitter } from './utils/event-emitter';
 
 export type SyntaxErrorMessage = { type: 'syntax-error', payload: { reason: string } };
 export type UserJoinMessage = { type: 'user/join', payload: { username: string } };
@@ -499,11 +499,11 @@ export class KarmanServer<TMessage extends { type: string }> extends EventEmitte
   /**
    * Kick a user from the server.
    *
-   * @param username The username of the user to kick from the server.
+   * @param username The username of the user to leave from the server.
    */
   public kick(username: string): void {
     if (this.state !== 'running') {
-      throw new Error('Cannot kick a user if the server is not running.');
+      throw new Error('Cannot leave a user if the server is not running.');
     }
     const user = this.users[username];
     if (user === undefined) {

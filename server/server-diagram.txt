@@ -1,7 +1,7 @@
 title ws-kar
 
 actor "Client" as client
-participant "Server" as server
+participant "User @ Server\nundefined > user > linked" as server
 participant "Server Logic" as backend
 
 group join
@@ -38,7 +38,7 @@ space -4
 server->client: custom/from-server-message
 backend->server: broadcast(from-server-message)
 space -4
-server->client: custom/from-server-message
+server-:4>client: custom/from-server-message
 end
 
 group unlink
@@ -59,7 +59,7 @@ activate server
 group leave
 client->server: user/leave
 space -4
-backend->server: leave(username) or kick(username)
+backend->server: leave(username) or leave(username)
 space -2
 server-:4>client: user/unlinked
 deactivate server

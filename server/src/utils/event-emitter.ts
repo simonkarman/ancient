@@ -4,10 +4,14 @@
 
 type Listener<T extends Array<unknown>> = (...args: T) => void;
 
+export interface IEventEmitter<EventMap extends Record<string, Array<unknown>>> {
+  on<K extends keyof EventMap>(eventName: K, listener: Listener<EventMap[K]>): void;
+}
+
 /**
  * An abstract type safe event emitter with a protected emit method that doesn't allow subscriptions while emitting.
  */
-export abstract class EventEmitter<EventMap extends Record<string, Array<unknown>>> {
+export abstract class EventEmitter<EventMap extends Record<string, Array<unknown>>> implements IEventEmitter<EventMap> {
   private eventListeners: {
     [K in keyof EventMap]?: Set<Listener<EventMap[K]>>;
   } = {};

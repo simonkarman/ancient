@@ -1,4 +1,4 @@
-import { EventEmitter } from '../src/event-emitter';
+import { EventEmitter } from '../../src/utils/event-emitter';
 
 describe('Event Emitter', () => {
   type ExampleEvents = {
