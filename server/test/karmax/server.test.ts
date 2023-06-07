@@ -1,8 +1,8 @@
 import { createServer, Status } from '../../src/karmax';
-import { withServer } from './server.test-utils';
+import { sleep, withServer, withCustomServer } from './server.test-utils';
 
 describe('Karmax Server', () => {
-  it('should cycle through all server statuses when starting and stopping', async () => {
+  it('should cycle through all server statuses when starting and closing', async () => {
     const server = createServer();
     expect(server.getStatus()).toStrictEqual<Status>('initializing');
     await new Promise<number>((resolve) => {
@@ -19,45 +19,45 @@ describe('Karmax Server', () => {
     expect(server.getStatus()).toStrictEqual<Status>('closed');
   });
 
-  it('should not be allowed to start a server that is already running',
+  it('should not be allowed to start listening on a server that is already listening',
     withServer(async ({ server }) => {
-      expect(() => server.listen()).toThrow('cannot start listening on a listening server');
+      expect(() => server.listen()).toThrow('cannot start listening when the server is listening');
     }),
   );
-//
-//   it('should send messages to a custom logger if provided', async () => {
-//     const log = jest.fn();
-//     const server = new KarmanServer({ log });
-//     server.start();
-//     await sleep();
-//     server.stop();
-//     expect(log).toHaveBeenCalledWith('info', expect.any(String));
-//   });
-//
-//   it('should add metadata to log messages when KarmanServer is constructed with metadata=true',
-//     withCustomServer(new KarmanServer({ metadata: true }), async({ server, addUser }) => {
-//       const [, simonEmit] = await addUser('simon');
-//       await sleep();
-//       for (let callIndex = 0; callIndex < simonEmit.message.mock.calls.length; callIndex++) {
-//         const call = simonEmit.message.mock.calls[callIndex];
-//         expect(call[0]).toHaveProperty('metadata', { timestamp: expect.any(String), isBroadcast: expect.any(Boolean) });
-//       }
-//
-//       // broadcast
-//       simonEmit.message.mockClear();
-//       server.broadcast({ type: 'custom/message' });
-//       await sleep();
-//       expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: true } });
-//       expect(simonEmit.message).toHaveBeenCalledTimes(1);
-//
-//       // send
-//       simonEmit.message.mockClear();
-//       server.send('simon', { type: 'custom/message' });
-//       await sleep();
-//       expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: false } });
-//       expect(simonEmit.message).toHaveBeenCalledTimes(1);
-//     }),
-//   );
+
+  it('should send messages to a custom logger if provided', async () => {
+    const logger = jest.fn();
+    const server = createServer({ logger });
+    server.listen();
+    await sleep();
+    server.close();
+    expect(logger).toHaveBeenCalledWith('info', expect.any(String));
+  });
+
+  it('should add metadata to messages when server has metadata enabled',
+    withCustomServer(createServer({ metadata: true }), async({ server, addUser }) => {
+      const [, simonEmit] = await addUser('simon');
+      await sleep();
+      for (let callIndex = 0; callIndex < simonEmit.message.mock.calls.length; callIndex++) {
+        const call = simonEmit.message.mock.calls[callIndex];
+        expect(call[0]).toHaveProperty('metadata', { timestamp: expect.any(String), isBroadcast: expect.any(Boolean) });
+      }
+
+      // broadcast
+      simonEmit.message.mockClear();
+      server.broadcast({ type: 'custom/message' });
+      await sleep();
+      expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: true } });
+      expect(simonEmit.message).toHaveBeenCalledTimes(1);
+
+      // send
+      simonEmit.message.mockClear();
+      server.send('simon', { type: 'custom/message' });
+      await sleep();
+      expect(simonEmit.message).toHaveBeenCalledWith({ type: 'custom/message', metadata: { timestamp: expect.any(String), isBroadcast: false } });
+      expect(simonEmit.message).toHaveBeenCalledTimes(1);
+    }),
+  );
 //
 //   it('should not be allowed to stop a server that is not running', async () => {
 //     const karmanServer = new KarmanServer();

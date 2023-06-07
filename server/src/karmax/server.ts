@@ -271,6 +271,14 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   private readonly connections: { [connectionId: string]: { socket: ws.WebSocket, username?: string } } = {};
   private readonly users: { [username: string]: { connectionId?: string } } = {};
   private status: Status;
+  private canOnly(action: string, when: Status[] | Status): void {
+    const cannot = typeof when === 'string'
+      ? when !== this.status
+      : !when.includes(this.status);
+    if (cannot) {
+      throw new Error(`cannot ${action} when the server is ${this.status}`);
+    }
+  }
 
   private constructor(props?: Props) {
     super();
@@ -295,13 +303,11 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
 
   public listen(port?: number): void {
-    if (this.status !== 'initializing') {
-      throw new Error(`cannot start listening on a ${this.status} server`);
-    }
+    this.canOnly('start listening', 'initializing');
     if (this.httpServer.listening) {
       const httpServerPort = (this.httpServer.address() as AddressInfo).port;
       if (port !== undefined && port !== httpServerPort) {
-        throw new Error(`cannot listen on ${port}, as the underlying http server is already listening on port ${httpServerPort}`);
+        throw new Error(`cannot start listening on port ${port} as the underlying http server is already listening on port ${httpServerPort}`);
       }
       this.onServerListening();
     } else {
@@ -431,9 +437,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
 
   public close(): void {
-    if (this.status !== 'starting' && this.status !== 'listening') {
-      throw new Error(`cannot close a ${this.status} server`);
-    }
+    this.canOnly('close', ['starting', 'listening']);
     this.status = 'closing';
     this.logger('info', 'server is closing');
     for (const username in this.users) {
@@ -464,9 +468,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     }
   }
   public broadcast(message: { type: string }, skipUsername?: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot broadcast a message, if the server is not listening');
-    }
+    this.canOnly('broadcast a message', ['listening', 'closing']);
     for (const username in this.users) {
       const { connectionId } = this.users[username];
       if (connectionId === undefined || username === skipUsername) {
@@ -476,9 +478,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     }
   }
   public send(username: string, message: { type: string }): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot send a message, if the server is not listening');
-    }
+    this.canOnly('send a message', ['listening', 'closing']);
     const user = this.users[username];
     if (user === undefined) {
       throw new Error(`cannot send message to username ${username}, as that user does not exist`);
@@ -490,9 +490,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
 
   public join(username: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot join a user, if the server is not listening');
-    }
+    this.canOnly('join a user', 'listening');
     if (this.users[username] !== undefined) {
       throw new Error('cannot join a user that already exist');
     }
@@ -506,9 +504,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.emit('join', username);
   }
   private link(connectionId: string, username: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot link a connection to a user, if the server is not listening');
-    }
+    this.canOnly('link a connection to a user', 'listening');
     if (this.users[username] === undefined) {
       throw new Error('cannot link a connection to a user that does not exist');
     }
@@ -533,9 +529,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.emit('link', username);
   }
   public unlink(username: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot unlink a connection from a user, if the server is not listening');
-    }
+    this.canOnly('unlink a connection from a user', ['listening', 'closing']);
     if (this.users[username] === undefined) {
       throw new Error('cannot unlink a connection from a user that does not exist');
     }
@@ -551,15 +545,11 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.emit('unlink', username);
   }
   public kick(username: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot kick a user, if the server is not listening');
-    }
+    this.canOnly('kick a user', 'listening');
     this.leave(username, 'kicked');
   }
   private leave(username: string, reason: string): void {
-    if (this.status !== 'listening') {
-      throw new Error('cannot leave a user, if the server is not listening');
-    }
+    this.canOnly('leave a user', ['listening', 'closing']);
     if (this.users[username] === undefined) {
       throw new Error('cannot leave a user that does not exist');
     }

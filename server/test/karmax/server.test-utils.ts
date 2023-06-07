@@ -58,8 +58,10 @@ export function withCustomServer<TScenario>(server: Server, callback: (props: {
       server.on('listen', resolve);
       server.listen();
     });
+    const users: ws.WebSocket[] = [];
     const addUser = async (username?: string): Promise<[user: ws.WebSocket, userEmit: UserEmit]> => {
       const user = new ws.WebSocket(`ws:127.0.0.1:${port}`);
+      users.push(user);
       const userEmit: UserEmit = {
         message: jest.fn(),
         close: jest.fn(),
@@ -93,6 +95,7 @@ export function withCustomServer<TScenario>(server: Server, callback: (props: {
         (scenario, index) => callback({ server, addUser: addUser, serverEmit, scenario: { index, value: scenario } }),
       ));
     } finally {
+      users.forEach(user => user.close());
       await new Promise<void>((resolve) => {
         server.on('close', resolve);
         server.close();
