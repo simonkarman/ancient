@@ -19,10 +19,17 @@ export interface UserEmit {
   close: jest.Mock<void, []>;
 }
 
+export interface User {
+  emit: UserEmit;
+  send: (message: { type: string }) => void;
+  sendRaw: (rawMessage: string) => void;
+  close: () => void;
+}
+
 export function withServer<TScenario>(callback: (props: {
   server: Server,
   serverEmit: ServerEmit,
-  addUser: (username?: string) => Promise<[user: ws.WebSocket, userEmit: UserEmit]>,
+  addUser: (username?: string) => Promise<User>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return withCustomServer(createServer(), callback, scenarios);
@@ -31,7 +38,7 @@ export function withServer<TScenario>(callback: (props: {
 export function withCustomServer<TScenario>(server: Server, callback: (props: {
   server: Server,
   serverEmit: ServerEmit,
-  addUser: (username?: string) => Promise<[user: ws.WebSocket, userEmit: UserEmit]>,
+  addUser: (username?: string) => Promise<User>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return async () => {
@@ -59,7 +66,7 @@ export function withCustomServer<TScenario>(server: Server, callback: (props: {
       server.listen();
     });
     const users: ws.WebSocket[] = [];
-    const addUser = async (username?: string): Promise<[user: ws.WebSocket, userEmit: UserEmit]> => {
+    const addUser = async (username?: string): Promise<User> => {
       const user = new ws.WebSocket(`ws:127.0.0.1:${port}`);
       users.push(user);
       const userEmit: UserEmit = {
@@ -88,11 +95,16 @@ export function withCustomServer<TScenario>(server: Server, callback: (props: {
       } else {
         await sleep();
       }
-      return [user, userEmit];
+      return {
+        emit: userEmit,
+        send: (message: { type: string }) => user.send(JSON.stringify(message)),
+        sendRaw: (message: string) => user.send(message),
+        close: () => user.close(),
+      };
     };
     try {
       await Promise.all((scenarios || [0 as unknown as TScenario]).map(
-        (scenario, index) => callback({ server, addUser: addUser, serverEmit, scenario: { index, value: scenario } }),
+        (scenario, index) => callback({ server, addUser, serverEmit, scenario: { index, value: scenario } }),
       ));
     } finally {
       users.forEach(user => user.close());

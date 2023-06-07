@@ -399,7 +399,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       return;
     }
     if (!isNewUser && this.users[username].connectionId !== undefined) {
-      reject(`username ${username} is already linked`);
+      reject(`user ${username} is already linked to a connection`);
       return;
     }
     this.emit('authenticate', username, isNewUser, reject);
@@ -423,7 +423,14 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       this.leave(username, 'voluntary');
       break;
     default:
-      this.emit('message', username, message);
+      if (message.type.startsWith('user/')) {
+        this.logger('warn', `${username} will be unlinked, because it send a ${message.type} message to the server, `
+          + 'while this is not a known user message that can be sent to the server, keep in mind that user/* messages are reserved for '
+          + 'internal use and should not be used for custom messages');
+        this.unlink(username);
+      } else {
+        this.emit('message', username, message);
+      }
       break;
     }
   }
