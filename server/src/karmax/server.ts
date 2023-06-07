@@ -190,6 +190,9 @@ export interface Server extends IEventEmitter<Events> {
    * Start listening at the specified port number.
    * This function is asynchronous, the server is listening once the server emits a 'listen' event.
    *
+   * Note: If you provided a http server that is already listening, then you can leave the port undefined or use the exact same port number. If you
+   *  provide a different port number, this method will throw an error.
+   *
    * @param port The port number at which to start the server. When not provided, the server will start listening at an available port.
    */
   listen(port?: number): void;
@@ -250,7 +253,7 @@ export interface Server extends IEventEmitter<Events> {
 
 /**
  * Create a new Server.
- * Note: This does not make the server start listening for connections, you can do that using the `.listen(<port>)` method on the new object.
+ * Note: This does not make the server start listening for connections, you can do that using the `.listen(<port>)` method on the created object.
  *
  * @param props The properties with which the server should be initialized.
  */
@@ -271,6 +274,13 @@ class ServerImpl extends EventEmitter<Events> implements Server {
 
   private constructor(props?: Props) {
     super();
+    this.logger = props?.logger ?? ((severity: LogSeverity, ...args: unknown[]) => {
+      severity !== 'debug' && console[severity](`[${severity}] [server]`, ...args);
+    });
+    this.metadata = props?.metadata ?? false;
+    this.acceptNewUsers = props?.acceptNewUsers ?? true;
+    this.isValidUsername = props?.isValidUsername ?? ((username: string) => /^[a-zA-Z0-9]{3,20}$/.test(username));
+
     this.status = 'initializing';
     this.httpServer = props?.http?.server ?? new http.Server();
     const wsServer = new WebSocketServer({
@@ -278,13 +288,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       path: props?.http?.path,
     });
     wsServer.on('connection', this.onConnectionOpen.bind(this));
-    wsServer.on('close', this.onServerClose.bind(this));
-    this.logger = props?.logger ?? ((severity: LogSeverity, ...args: unknown[]) => {
-      severity !== 'debug' && console[severity](`[${severity}] [server]`, ...args);
-    });
-    this.metadata = props?.metadata ?? false;
-    this.acceptNewUsers = props?.acceptNewUsers ?? true;
-    this.isValidUsername = props?.isValidUsername ?? ((username: string) => /^[a-zA-Z0-9]{3,20}$/.test(username));
+    this.httpServer.on('close', this.onServerClose.bind(this));
   }
   static create(props?: Props): Server {
     return new ServerImpl(props);
@@ -294,13 +298,23 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     if (this.status !== 'initializing') {
       throw new Error(`cannot start listening on a ${this.status} server`);
     }
-    this.status = 'starting';
-    this.httpServer.listen(port, () => {
-      this.status = 'listening';
-      const address = this.httpServer.address() as AddressInfo;
-      this.logger('info', `listening on port ${address.port}`);
-      this.emit('listen', address.port);
-    });
+    if (this.httpServer.listening) {
+      const httpServerPort = (this.httpServer.address() as AddressInfo).port;
+      if (port !== undefined && port !== httpServerPort) {
+        throw new Error(`cannot listen on ${port}, as the underlying http server is already listening on port ${httpServerPort}`);
+      }
+      this.onServerListening();
+    } else {
+      this.status = 'starting';
+      this.httpServer.on('listening', this.onServerListening.bind(this));
+      this.httpServer.listen(port);
+    }
+  }
+  private onServerListening() {
+    this.status = 'listening';
+    const address = this.httpServer.address() as AddressInfo;
+    this.logger('info', `listening on port ${address.port}`);
+    this.emit('listen', address.port);
   }
   private onConnectionOpen(socket: WebSocket): void {
     if (this.status !== 'listening') {

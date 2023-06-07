@@ -1,11 +1,10 @@
-import { monitorUsers } from './server/debug';
-import { LogSeverity, createServer } from './server';
+import { monitorUsers } from './debug';
+import { LogSeverity, createServer } from './karmax';
 
 const server = createServer({
   logger: ((severity: LogSeverity, ...args: unknown[]) => {
     console[severity](`[${severity}] [server]`, ...args);
   }),
-  metadata: true,
 });
 monitorUsers(server);
 
@@ -24,4 +23,3 @@ server.on('message', (username, message) => {
 });
 
 server.listen(8082);
-

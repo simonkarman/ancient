@@ -1,17 +1,17 @@
 import ws from 'ws';
-import { KarmanServer, KarmanServerMessage, UserJoinMessage } from '../src/karman-server';
+import { Server, createServer } from '../../src/karmax';
 
 export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
-export interface ServerEmit<TMessage> {
-  start: jest.Mock<void, [number]>;
-  stop: jest.Mock<void, []>;
-  accept: jest.Mock<void, [string, (reason: string) => void]>;
+export interface ServerEmit {
+  listen: jest.Mock<void, [number]>;
+  close: jest.Mock<void, []>;
+  authenticate: jest.Mock<void, [string, boolean, (reason: string) => void]>;
   join: jest.Mock<void, [string]>;
   link: jest.Mock<void, [string]>;
   unlink: jest.Mock<void, [string]>;
-  leave: jest.Mock<void, [string, 'voluntary' | 'kicked']>;
-  message: jest.Mock<void, [string, TMessage]>;
+  leave: jest.Mock<void, [string, string]>;
+  message: jest.Mock<void, [string, { type: string }]>;
 }
 
 export interface UserEmit {
@@ -19,35 +19,35 @@ export interface UserEmit {
   close: jest.Mock<void, []>;
 }
 
-export function withServer<TMessage extends { type: string }, TScenario>(callback: (props: {
-  server: KarmanServer<TMessage>,
-  serverEmit: ServerEmit<TMessage>,
+export function withServer<TScenario>(callback: (props: {
+  server: Server,
+  serverEmit: ServerEmit,
   addUser: (username?: string) => Promise<[user: ws.WebSocket, userEmit: UserEmit]>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
-  return withCustomServer(new KarmanServer<TMessage>(), callback, scenarios);
+  return withCustomServer(createServer(), callback, scenarios);
 }
 
-export function withCustomServer<TMessage extends { type: string }, TScenario>(server: KarmanServer<TMessage>, callback: (props: {
-  server: KarmanServer<TMessage>,
-  serverEmit: ServerEmit<TMessage>,
+export function withCustomServer<TScenario>(server: Server, callback: (props: {
+  server: Server,
+  serverEmit: ServerEmit,
   addUser: (username?: string) => Promise<[user: ws.WebSocket, userEmit: UserEmit]>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return async () => {
-    const serverEmit: ServerEmit<TMessage> = {
-      start: jest.fn(),
-      stop: jest.fn(),
-      accept: jest.fn(),
+    const serverEmit: ServerEmit = {
+      listen: jest.fn(),
+      close: jest.fn(),
+      authenticate: jest.fn(),
       join: jest.fn(),
       link: jest.fn(),
       unlink: jest.fn(),
       leave: jest.fn(),
       message: jest.fn(),
     };
-    server.on('start', (port) => serverEmit.start(port));
-    server.on('stop', () => serverEmit.stop());
-    server.on('accept', (username, reject) => {serverEmit.accept(username, reject);});
+    server.on('listen', (port) => serverEmit.listen(port));
+    server.on('close', () => serverEmit.close());
+    server.on('authenticate', (username, isNewUser, reject) => {serverEmit.authenticate(username, isNewUser, reject);});
     server.on('join', (username) => serverEmit.join(username));
     server.on('link', (username) => serverEmit.link(username));
     server.on('unlink', (username) => serverEmit.unlink(username));
@@ -55,10 +55,9 @@ export function withCustomServer<TMessage extends { type: string }, TScenario>(s
     server.on('message', (username, message) => {serverEmit.message(username, message);});
 
     const port = await new Promise<number>((resolve) => {
-      server.on('start', resolve);
-      server.start();
+      server.on('listen', resolve);
+      server.listen();
     });
-    const users: ws.WebSocket[] = [];
     const addUser = async (username?: string): Promise<[user: ws.WebSocket, userEmit: UserEmit]> => {
       const user = new ws.WebSocket(`ws:127.0.0.1:${port}`);
       const userEmit: UserEmit = {
@@ -69,11 +68,10 @@ export function withCustomServer<TMessage extends { type: string }, TScenario>(s
         userEmit.message(JSON.parse(data.toString()));
       });
       user.on('close', () => {userEmit.close();});
-      users.push(user);
       if (username !== undefined) {
         await new Promise<void>((resolve, reject) => {
           user.on('message', (rawDate) => {
-            const message: KarmanServerMessage = JSON.parse(rawDate.toString());
+            const message = JSON.parse(rawDate.toString());
             if (message.type === 'user/accepted') {
               resolve();
             } else if (message.type === 'user/rejected') {
@@ -81,8 +79,8 @@ export function withCustomServer<TMessage extends { type: string }, TScenario>(s
             }
           });
           user.on('open', () => {
-            const userJoinMessage: UserJoinMessage = { type: 'user/join', payload: { username } };
-            user.send(JSON.stringify(userJoinMessage));
+            const userAuthenticateMessage = { type: 'user/authenticate', payload: { username } };
+            user.send(JSON.stringify(userAuthenticateMessage));
           });
         });
       } else {
@@ -95,10 +93,9 @@ export function withCustomServer<TMessage extends { type: string }, TScenario>(s
         (scenario, index) => callback({ server, addUser: addUser, serverEmit, scenario: { index, value: scenario } }),
       ));
     } finally {
-      users.forEach((user) => user.close());
       await new Promise<void>((resolve) => {
-        server.on('stop', resolve);
-        server.stop();
+        server.on('close', resolve);
+        server.close();
       });
     }
   };
