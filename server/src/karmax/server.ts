@@ -1,7 +1,7 @@
 import http from 'http';
-import short from 'short-uuid';
 import { DateTime } from 'luxon';
-import ws, { AddressInfo, WebSocketServer, WebSocket, RawData } from 'ws';
+import short from 'short-uuid';
+import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
 import { EventEmitter, IEventEmitter } from '../utils/event-emitter';
 
 interface UserAuthenticateMessage { type: 'user/authenticate', payload: { username: string } }
@@ -390,7 +390,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       reject('unauthenticated');
       return;
     }
-    if (!('payload' in message) || typeof message?.payload?.username !== 'string') {
+    if (!('payload' in message) || typeof (message.payload.username as unknown) !== 'string') {
       reject('invalid authentication');
       return;
     }
@@ -467,6 +467,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
 
   private sendTo(connectionId: string, message: FromServerMessage | Message, isBroadcast: boolean) {
     const connection = this.connections[connectionId];
+    /* istanbul ignore next */
     if (connection === undefined) {
       throw new Error(`cannot send ${message.type} message to connection ${connectionId}, as that connection does not exist`);
     }
@@ -518,9 +519,11 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
   private link(connectionId: string, username: string): void {
     this.canOnly('link a connection to a user', 'listening');
+    /* istanbul ignore next */
     if (this.users[username] === undefined) {
       throw new Error('cannot link a connection to a user that does not exist');
     }
+    /* istanbul ignore next */
     if (this.connections[connectionId] === undefined) {
       throw new Error('cannot link a user to a connection that does not exist');
     }
@@ -567,6 +570,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
   private leave(username: string, reason: string): void {
     this.canOnly('leave a user', ['listening', 'closing']);
+    /* istanbul ignore next */
     if (this.users[username] === undefined) {
       throw new Error('cannot leave a user that does not exist');
     }

@@ -1,7 +1,7 @@
 import http from 'http';
 import { AddressInfo } from 'ws';
 import { createServer, Status } from '../../src/karmax';
-import { sleep, withServer, withCustomServer } from './server.test-utils';
+import { sleep, withCustomServer, withServer } from './server.test-utils';
 
 describe('Karmax Server', () => {
   it('should cycle through all server statuses when starting and closing', async () => {
@@ -449,10 +449,12 @@ describe('Karmax Server', () => {
           reject('relinking is not allowed here');
         } else if (server.getUsers().length >= 1) {
           reject('server is full');
+          reject('this should not show up');
         }
       });
       const simon = await addUser('simon');
       simon.close();
+      await sleep();
       await expect(addUser('simon')).rejects.toBe('relinking is not allowed here');
       await expect(addUser('lisa')).rejects.toBe('server is full');
       expect(serverEmit.authenticate).toHaveBeenCalledTimes(3);
@@ -497,6 +499,28 @@ describe('Karmax Server', () => {
   it('should not allow kicking a user, if that user does not exist',
     withServer(async ({ server }) => {
       expect(() => server.kick('simon')).toThrow('cannot kick a user that does not exist');
+    }),
+  );
+
+  it('should not allow server side join on a user that already exists',
+    withServer(async ({ server }) => {
+      server.join('simon');
+      expect(() => server.join('simon')).toThrow('cannot join a user that already exist');
+    }),
+  );
+
+  it('should not allow server side unlink on a user that does not exist',
+    withServer(async ({ server }) => {
+      expect(() => server.unlink('simon')).toThrow('cannot unlink a connection from a user that does not exist');
+    }),
+  );
+
+  it('should not allow server side unlink on a user that is not linked',
+    withServer(async ({ server, addUser }) => {
+      const simon = await addUser('simon');
+      simon.close();
+      await sleep();
+      expect(() => server.unlink('simon')).toThrow('cannot unlink a connection from a user that is not linked');
     }),
   );
 

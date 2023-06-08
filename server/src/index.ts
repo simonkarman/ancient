@@ -1,5 +1,5 @@
 import { monitorUsers } from './debug';
-import { LogSeverity, createServer } from './karmax';
+import { createServer, LogSeverity } from './karmax';
 
 const server = createServer({
   logger: ((severity: LogSeverity, ...args: unknown[]) => {

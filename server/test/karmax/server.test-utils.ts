@@ -1,5 +1,5 @@
 import ws from 'ws';
-import { Server, createServer, Message, Props } from '../../src/karmax';
+import { createServer, Message, Props, Server } from '../../src/karmax';
 
 export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
