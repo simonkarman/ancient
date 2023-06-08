@@ -1,5 +1,5 @@
 import ws from 'ws';
-import { Server, createServer, Message } from '../../src/karmax';
+import { Server, createServer, Message, Props } from '../../src/karmax';
 
 export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,16 +32,17 @@ export function withServer<TScenario>(callback: (props: {
   addUser: (username?: string) => Promise<User>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
-  return withCustomServer(createServer(), callback, scenarios);
+  return withCustomServer({}, callback, scenarios);
 }
 
-export function withCustomServer<TScenario>(server: Server, callback: (props: {
+export function withCustomServer<TScenario>(serverProps: Props, callback: (props: {
   server: Server,
   serverEmit: ServerEmit,
   addUser: (username?: string) => Promise<User>,
   scenario: { index: number, value: TScenario },
 }) => Promise<void>, scenarios?: TScenario[]): () => Promise<void> {
   return async () => {
+    const server = createServer(serverProps);
     const serverEmit: ServerEmit = {
       listen: jest.fn(),
       close: jest.fn(),
@@ -67,7 +68,7 @@ export function withCustomServer<TScenario>(server: Server, callback: (props: {
     });
     const users: ws.WebSocket[] = [];
     const addUser = async (username?: string): Promise<User> => {
-      const user = new ws.WebSocket(`ws:127.0.0.1:${port}`);
+      const user = new ws.WebSocket(`ws:127.0.0.1:${port}${serverProps?.http?.path || ''}`);
       users.push(user);
       const userEmit: UserEmit = {
         message: jest.fn(),

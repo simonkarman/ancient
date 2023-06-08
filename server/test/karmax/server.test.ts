@@ -1,3 +1,5 @@
+import http from 'http';
+import { AddressInfo } from 'ws';
 import { createServer, Status } from '../../src/karmax';
 import { sleep, withServer, withCustomServer } from './server.test-utils';
 
@@ -35,7 +37,7 @@ describe('Karmax Server', () => {
   });
 
   it('should add metadata to messages when server has metadata enabled',
-    withCustomServer(createServer({ metadata: true }), async({ server, addUser }) => {
+    withCustomServer({ metadata: true }, async({ server, addUser }) => {
       const simon = await addUser('simon');
       await sleep();
       for (let callIndex = 0; callIndex < simon.emit.message.mock.calls.length; callIndex++) {
@@ -148,7 +150,7 @@ describe('Karmax Server', () => {
     }),
   );
 
-  const invalidJsonMessages = ['', 'this-is-not-a-json-message', '{}', '{"type":3}', '{"type":{"key":"value"}}'];
+  const invalidJsonMessages = ['', 'true', '"hello"', '42', 'null', 'this-is-not-a-json-message', '{}', '{"type":3}', '{"type":{"key":"value"}}'];
   it('should send a rejected message if a connection sends a message with unknown format',
     withServer(async({ addUser, scenario }) => {
       const user = await addUser();
@@ -497,4 +499,73 @@ describe('Karmax Server', () => {
       expect(() => server.kick('simon')).toThrow('cannot kick a user that does not exist');
     }),
   );
+
+  it('should only accept known users during authentication when server has acceptNewUser set to false',
+    withCustomServer({ acceptNewUsers: false }, async ({ server, addUser }) => {
+      server.join('simon');
+      await addUser('simon');
+      await expect(addUser('lisa')).rejects.toBe('server is not accepting new users');
+    }),
+  );
+
+  it('should not join user with an invalid username when a custom invalid username method is provided',
+    withCustomServer({ isValidUsername: (username: string) => !username.startsWith('bot') }, async ({ server, addUser }) => {
+      await addUser('simon');
+      server.join('lisa');
+      await expect(addUser('bot 1')).rejects.toBe('invalid username');
+      expect(() => server.join('bot 2')).toThrow('invalid username');
+    }),
+  );
+
+  it('should use existing http server when provided',
+    withCustomServer({ http: { server: new http.Server() } }, async ({ server, addUser }) => {
+      await addUser('simon');
+    }),
+  );
+
+  it('should use existing http server, even if that http server is already listening', async () => {
+    const httpServer = new http.Server();
+    httpServer.listen();
+    await sleep();
+    await withCustomServer({ http: { server: httpServer } }, async ({ addUser }) => {
+      await addUser('simon');
+    });
+  });
+
+  it('should use existing http server, even if that http server just started listening', async () => {
+    const httpServer = new http.Server();
+    httpServer.listen();
+    await withCustomServer({ http: { server: httpServer } }, async ({ addUser }) => {
+      await addUser('simon');
+    });
+  });
+
+  it('should use custom http path when provided',
+    withCustomServer({ http: { path: '/my/application' } }, async ({ addUser }) => {
+      await addUser('simon');
+    }),
+  );
+
+  it('should call listen on server even when provided http server is already listening', async () => {
+    const httpServer = new http.Server();
+    httpServer.listen();
+    try {
+      await sleep();
+      const server = createServer({ http: { server: httpServer } });
+      expect(() => server.join('simon')).toThrow('cannot join a user when the server is initializing');
+      const httpServerPort = (httpServer.address() as AddressInfo).port;
+      expect(() => server.listen(httpServerPort + 1))
+        .toThrow(`cannot start listening on port ${httpServerPort + 1} as the underlying http server is already listening on port ${httpServerPort}`);
+      await new Promise<number>((resolve) => {
+        server.on('listen', resolve);
+        server.listen();
+      });
+      expect(() => server.join('simon')).not.toThrow();
+    } finally {
+      await new Promise<void>((resolve) => {
+        httpServer.on('close', resolve);
+        httpServer.close();
+      });
+    }
+  });
 });

@@ -328,6 +328,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.emit('listen', address.port);
   }
   private onConnectionOpen(socket: WebSocket): void {
+    /* istanbul ignore next */
     if (this.status !== 'listening') {
       this.logger('debug', `incoming connection is immediately discarded as the server is ${this.status}`);
       socket.close();
@@ -344,7 +345,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   private tryParse(data: RawData): Message | false {
     try {
       const message: unknown = JSON.parse(data.toString());
-      if (!message || typeof message !== 'object') {
+      if (typeof message !== 'object' || message === null || !message) {
         return false;
       }
       const type = 'type' in message ? message.type : undefined;
