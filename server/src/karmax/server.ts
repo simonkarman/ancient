@@ -96,7 +96,7 @@ export interface Props {
 }
 
 /**
- * The status of the Server.
+ * Status of a server.
  *
  * @description *initializing*: The server is initializing, but is not yet listening. This allows you to configure callbacks for the server
  *  before it starts listening.
@@ -121,6 +121,11 @@ export interface User {
    */
   isLinked: boolean;
 }
+
+/**
+ * A message
+ */
+export type Message = { type: string };
 
 type Events = {
   /**
@@ -179,7 +184,7 @@ type Events = {
    * @param username The username of the user that send the message.
    * @param message The content of the message that the user sent.
    */
-  message: [username: string, message: { type: string }];
+  message: [username: string, message: Message];
 }
 
 /**
@@ -198,26 +203,26 @@ export interface Server extends IEventEmitter<Events> {
   listen(port?: number): void;
 
   /**
-   * Closes the server.
+   * Close the server.
    * This function is asynchronous, the server is closed when all connections are ended and the server emits a 'close' event.
    */
   close(): void;
 
   /**
-   * Sends a message to a specific user.
-   *
-   * @param username The username of the user to send the message to.
-   * @param message The message to send to the user.
-   */
-  send(username: string, message: { type: string }): void;
-
-  /**
-   * Broadcasts a message to all users, that are currently connected to the server.
+   * Broadcast a message to all users, that are currently connected to the server.
    *
    * @param message The message to send to all the users.
    * @param skipUsername (optional) The username of the user you want to skip sending this message to.
    */
-  broadcast(message: { type: string}, skipUsername?: string): void;
+  broadcast<TMessage extends Message>(message: TMessage, skipUsername?: string): void;
+
+  /**
+   * Send a message to a specific user.
+   *
+   * @param username The username of the user to send the message to.
+   * @param message The message to send to the user.
+   */
+  send<TMessage extends Message>(username: string, message: TMessage): void;
 
   /**
    * Join a new (unlinked) user to the server.
@@ -336,7 +341,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     socket.on('message', this.onConnectionData.bind(this, connectionId));
     socket.on('close', this.onConnectionClosed.bind(this, connectionId));
   }
-  private tryParse(data: RawData): { type: string } | false {
+  private tryParse(data: RawData): Message | false {
     try {
       const message: unknown = JSON.parse(data.toString());
       if (!message || typeof message !== 'object') {
@@ -371,7 +376,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       }
     }
   }
-  private onUnlinkedConnectionMessage(connectionId: string, message: FromConnectionMessage | { type: string }) {
+  private onUnlinkedConnectionMessage(connectionId: string, message: FromConnectionMessage | Message) {
     let rejected = false;
     const reject = (reason: string) => {
       if (rejected) { return; }
@@ -413,7 +418,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     }
     this.link(connectionId, username);
   }
-  private onLinkedConnectionMessage(username: string, message: FromConnectionMessage | { type: string }) {
+  private onLinkedConnectionMessage(username: string, message: FromConnectionMessage | Message) {
     switch (message.type) {
     case 'user/authenticate':
     case 'user/unlink':
@@ -459,7 +464,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.emit('close');
   }
 
-  private sendTo(connectionId: string, message: FromServerMessage | { type: string }, isBroadcast: boolean) {
+  private sendTo(connectionId: string, message: FromServerMessage | Message, isBroadcast: boolean) {
     const connection = this.connections[connectionId];
     if (connection === undefined) {
       throw new Error(`cannot send ${message.type} message to connection ${connectionId}, as that connection does not exist`);
@@ -474,7 +479,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       this.logger('debug', `could not send ${message.type} message to connection ${connectionId}, because the socket is not open`);
     }
   }
-  public broadcast(message: { type: string }, skipUsername?: string): void {
+  public broadcast<TMessage extends Message>(message: TMessage, skipUsername?: string): void {
     this.canOnly('broadcast a message', ['listening', 'closing']);
     for (const username in this.users) {
       const { connectionId } = this.users[username];
@@ -484,14 +489,14 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       this.sendTo(connectionId, message, true);
     }
   }
-  public send(username: string, message: { type: string }): void {
+  public send<TMessage extends Message>(username: string, message: TMessage): void {
     this.canOnly('send a message', ['listening', 'closing']);
     const user = this.users[username];
     if (user === undefined) {
-      throw new Error(`cannot send message to username ${username}, as that user does not exist`);
+      throw new Error('cannot send a message to a user that does not exist');
     }
     if (user.connectionId === undefined) {
-      throw new Error(`cannot send message to username ${username}, as that user is not linked to a connection`);
+      throw new Error('cannot send a message to a user that is not linked to a connection');
     }
     this.sendTo(user.connectionId, message, false);
   }
@@ -507,7 +512,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.logger('info', `${username} joined`);
     const userJoinedMessage: UserJoinedMessage = { type: 'user/joined', payload: { username } };
     this.broadcast(userJoinedMessage);
-    this.users[username] = {}; // TODO: should you be able to broadcast to a user that just joined?
+    this.users[username] = {};
     this.emit('join', username);
   }
   private link(connectionId: string, username: string): void {
@@ -553,6 +558,10 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
   public kick(username: string): void {
     this.canOnly('kick a user', 'listening');
+    if (this.users[username] === undefined) {
+      throw new Error('cannot kick a user that does not exist');
+    }
+    this.logger('info', `${username} kicked`);
     this.leave(username, 'kicked');
   }
   private leave(username: string, reason: string): void {

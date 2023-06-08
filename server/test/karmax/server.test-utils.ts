@@ -1,5 +1,5 @@
 import ws from 'ws';
-import { Server, createServer } from '../../src/karmax';
+import { Server, createServer, Message } from '../../src/karmax';
 
 export const sleep = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
@@ -21,7 +21,7 @@ export interface UserEmit {
 
 export interface User {
   emit: UserEmit;
-  send: (message: { type: string }) => void;
+  send: <TMessage extends Message>(message: TMessage) => void;
   sendRaw: (rawMessage: string) => void;
   close: () => void;
 }
