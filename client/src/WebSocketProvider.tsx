@@ -19,12 +19,16 @@ export const WebSocketProvider: FC<PropsWithChildren<{
   const send: Send = (message) => {
     ws.current?.send(JSON.stringify(message));
   };
+  const authenticate = () => {
+    dispatch(userReset({ username: props.username }));
+    send({ type: 'user/authenticate', payload: { username: props.username } });
+  };
+
   useEffect(() => {
     const socket = new WebSocket('ws://localhost:8082/game?ancient=true&version=0-0-1');
     socket.onopen = () => {
       setConnection('connected');
-      dispatch(userReset({ username: props.username }));
-      send({ type: 'user/authenticate', payload: { username: props.username } });
+      authenticate();
     };
     socket.onclose = () => {
       setConnection('disconnected');
@@ -51,7 +55,7 @@ export const WebSocketProvider: FC<PropsWithChildren<{
           {props.children}
         </> : <p>
           Your connection is not linked to a user...<br/>
-          <button onClick={() => send({ type: 'user/authenticate', payload: { username: props.username } })}>Link as {props.username}</button>
+          <button onClick={authenticate}>Link as {props.username}</button>
           {rejectionReason && <>You are rejected because: {rejectionReason}</>}
         </p>}
       </>}
