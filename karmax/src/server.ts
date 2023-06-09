@@ -308,7 +308,11 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.httpServer = props?.http?.server ?? new http.Server();
     const wsServer = new WebSocketServer({
       server: this.httpServer,
-      path: props?.http?.path,
+      path: props?.http?.path !== undefined
+        ? (props.http.path.startsWith('/')
+          ? props.http.path
+          : `/${props.http.path}`)
+        : undefined,
     });
     wsServer.on('connection', this.onConnectionOpen.bind(this));
     this.httpServer.on('close', this.onServerClose.bind(this));
@@ -397,7 +401,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     let rejected = false;
     const reject = (reason: string) => {
       if (rejected) { return; }
-      this.logger('debug', `connection '${connectionId}' rejected, due to: ${reason}`);
+      this.logger('debug', `connection ${connectionId} rejected, due to: ${reason}`);
       const userRejectedMessage: UserRejectedMessage = { type: 'user/rejected', payload: { reason } };
       this.sendTo(connectionId, userRejectedMessage, false);
       rejected = true;
@@ -428,6 +432,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     if (rejected) {
       return;
     }
+    this.logger('debug', `connection ${connectionId} accepted as ${username}`);
     const userAcceptedMessage: UserAcceptedMessage = { type: 'user/accepted' };
     this.sendTo(connectionId, userAcceptedMessage, false);
     if (isNewUser) {
@@ -546,18 +551,22 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.logger('info', `${username} linked`);
     this.users[username].connectionId = connectionId;
     this.connections[connectionId].username = username;
-    const userLinkedMessage: UserLinkedMessage = { type: 'user/linked', payload: { username } };
-    this.broadcast(userLinkedMessage);
     Object.entries(this.users).forEach(([otherUsername, { connectionId: otherConnectionId }]) => {
-      if (otherUsername === username) {
-        return;
-      }
-      const message: UserUnlinkedMessage | UserLinkedMessage = {
-        type: otherConnectionId === undefined ? 'user/unlinked' : 'user/linked',
+      const joinedMessage: UserJoinedMessage = {
+        type: 'user/joined',
         payload: { username: otherUsername },
       };
-      this.sendTo(connectionId, message, false);
+      this.sendTo(connectionId, joinedMessage, false);
+      if (otherConnectionId !== undefined) {
+        const linkedMessage: UserLinkedMessage = {
+          type: 'user/linked',
+          payload: { username: otherUsername },
+        };
+        this.sendTo(connectionId, linkedMessage, false);
+      }
     });
+    const userLinkedMessage: UserLinkedMessage = { type: 'user/linked', payload: { username } };
+    this.broadcast(userLinkedMessage, username);
     this.emit('link', username);
   }
   public unlink(username: string): void {

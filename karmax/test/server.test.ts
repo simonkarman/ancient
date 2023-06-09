@@ -238,22 +238,30 @@ describe('Karmax Server', () => {
       await sleep();
       const marjolein = await addUser('marjolein');
       await sleep();
-      expect(marjolein.emit.message).toHaveBeenCalledWith({
+      expect(marjolein.emit.message).toHaveBeenNthCalledWith(1, {
         type: 'user/accepted',
+      });
+      expect(marjolein.emit.message).toHaveBeenCalledWith({
+        type: 'user/joined',
+        payload: { username: 'marjolein' },
+      });
+      expect(marjolein.emit.message).toHaveBeenCalledWith({
+        type: 'user/linked',
+        payload: { username: 'marjolein' },
+      });
+      expect(marjolein.emit.message).toHaveBeenCalledWith({
+        type: 'user/joined',
+        payload: { username: 'simon' },
       });
       expect(marjolein.emit.message).toHaveBeenCalledWith({
         type: 'user/linked',
         payload: { username: 'simon' },
       });
       expect(marjolein.emit.message).toHaveBeenCalledWith({
-        type: 'user/unlinked',
+        type: 'user/joined',
         payload: { username: 'lisa' },
       });
-      expect(marjolein.emit.message).toHaveBeenCalledWith({
-        type: 'user/linked',
-        payload: { username: 'marjolein' },
-      });
-      expect(marjolein.emit.message).toHaveBeenCalledTimes(4);
+      expect(marjolein.emit.message).toHaveBeenCalledTimes(6);
       expect(server.getUsers()).toStrictEqual([
         { username: 'simon', isLinked: true },
         { username: 'lisa', isLinked: false },

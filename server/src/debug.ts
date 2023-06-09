@@ -11,7 +11,7 @@ export const monitorUsers = (server: Server) => {
       }
       const users = server.getUsers();
       const userInfo = users.map(({ username, isLinked }) => `${username}${isLinked ? '' : ' (offline)'}`);
-      console.debug('[debug] [ancient]', users.length, 'user(s):', userInfo);
+      console.info('[info] [monitor]', users.length, 'user(s):', userInfo);
     }, 100);
   };
   server.on('join', printUsers);
