@@ -1,8 +1,8 @@
 {
-  "name": "ancient-server",
+  "name": "karmax",
   "version": "0.1.0",
-  "private": true,
-  "description": "ancient server",
+  "main": "src/index.ts",
+  "description": "karmax",
   "scripts": {
     "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts",
     "test": "jest --coverage --silent --verbose",
@@ -12,7 +12,6 @@
   "author": "Simon Karman",
   "license": "ISC",
   "dependencies": {
-    "karmax": "file:../karmax",
     "luxon": "^3.3.0",
     "short-uuid": "^4.2.2",
     "ws": "^8.13.0"

@@ -1,5 +1,5 @@
 import { monitorUsers } from './debug';
-import { createServer, LogSeverity } from './karmax';
+import { createServer, LogSeverity } from 'karmax';
 
 const server = createServer({
   http: { queryParams: { ancient: true, version: '0.0.1' } },

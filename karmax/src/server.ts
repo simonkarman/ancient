@@ -2,7 +2,7 @@ import http from 'http';
 import { DateTime } from 'luxon';
 import short from 'short-uuid';
 import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
-import { EventEmitter, IEventEmitter } from '../utils/event-emitter';
+import { EventEmitter, IEventEmitter } from './event-emitter';
 import { ExpectedQueryParams, hasExpectedQueryParams } from './utils';
 
 interface UserAuthenticateMessage { type: 'user/authenticate', payload: { username: string } }

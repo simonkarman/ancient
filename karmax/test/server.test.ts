@@ -1,6 +1,6 @@
 import http from 'http';
 import { AddressInfo } from 'ws';
-import { createServer, Status } from '../../src/karmax';
+import { createServer, Status } from '../src';
 import { sleep, withCustomServer, withServer } from './server.test-utils';
 
 describe('Karmax Server', () => {

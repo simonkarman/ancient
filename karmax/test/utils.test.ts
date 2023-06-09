@@ -1,4 +1,4 @@
-import { hasExpectedQueryParams, ExpectedQueryParams } from '../../src/karmax/utils';
+import { hasExpectedQueryParams, ExpectedQueryParams } from '../src/utils';
 
 describe('Karmax Utils - hasExpectedQueryParams', () => {
   const scenarios: readonly (string | undefined)[] = [
