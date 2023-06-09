@@ -10,7 +10,7 @@ export const monitorUsers = (server: Server) => {
         return;
       }
       const users = server.getUsers();
-      const userInfo = users.map(({ username, isLinked }) => `${username}${isLinked ? '' : ' (offline)'}`);
+      const userInfo = users.map(({ username, isLinked }) => `${isLinked ? '🟢' : '🔴'} ${username}`);
       console.info('[info] [monitor]', users.length, 'user(s):', userInfo);
     }, 100);
   };
