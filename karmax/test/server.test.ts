@@ -578,6 +578,12 @@ describe('Karmax Server', () => {
     }),
   );
 
+  it('should use custom http path when provided even without a starting slash',
+    withCustomServer({ http: { path: 'my/application' } }, async ({ addUser }) => {
+      await addUser('simon');
+    }),
+  );
+
   it('should close a connection immediately when the karmax query parameter does not match the server name',
     withCustomServer({ http: { queryParams: { 'something-else': true } } }, async ({ addUser }) => {
       await expect(addUser('simon')).rejects.toBe('connection closed');

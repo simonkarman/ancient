@@ -67,8 +67,10 @@ export function withCustomServer<TScenario>(serverProps: Props, callback: (props
       server.listen();
     });
     const users: ws.WebSocket[] = [];
+    const path = serverProps?.http?.path || '/';
+    const url = `ws:127.0.0.1:${port}${path.startsWith('/') ? path : `/${path}`}`;
     const addUser = async (username?: string): Promise<User> => {
-      const user = new ws.WebSocket(`ws:127.0.0.1:${port}${serverProps?.http?.path || ''}`);
+      const user = new ws.WebSocket(url);
       users.push(user);
       const userEmit: UserEmit = {
         message: jest.fn(),
