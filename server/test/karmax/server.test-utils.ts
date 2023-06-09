@@ -92,6 +92,7 @@ export function withCustomServer<TScenario>(serverProps: Props, callback: (props
             const userAuthenticateMessage = { type: 'user/authenticate', payload: { username } };
             user.send(JSON.stringify(userAuthenticateMessage));
           });
+          user.on('close', () => reject('connection closed'));
         });
       } else {
         await sleep();

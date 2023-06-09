@@ -553,7 +553,7 @@ describe('Karmax Server', () => {
     await sleep();
     await withCustomServer({ http: { server: httpServer } }, async ({ addUser }) => {
       await addUser('simon');
-    });
+    })();
   });
 
   it('should use existing http server, even if that http server just started listening', async () => {
@@ -561,12 +561,18 @@ describe('Karmax Server', () => {
     httpServer.listen();
     await withCustomServer({ http: { server: httpServer } }, async ({ addUser }) => {
       await addUser('simon');
-    });
+    })();
   });
 
   it('should use custom http path when provided',
     withCustomServer({ http: { path: '/my/application' } }, async ({ addUser }) => {
       await addUser('simon');
+    }),
+  );
+
+  it('should close a connection immediately when the karmax query parameter does not match the server name',
+    withCustomServer({ http: { queryParams: { 'something-else': true } } }, async ({ addUser }) => {
+      await expect(addUser('simon')).rejects.toBe('connection closed');
     }),
   );
 

@@ -2,6 +2,7 @@ import { monitorUsers } from './debug';
 import { createServer, LogSeverity } from './karmax';
 
 const server = createServer({
+  http: { queryParams: { ancient: true, version: '0.0.1' } },
   logger: ((severity: LogSeverity, ...args: unknown[]) => {
     console[severity](`[${severity}] [server]`, ...args);
   }),

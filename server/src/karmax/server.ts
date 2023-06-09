@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import short from 'short-uuid';
 import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
 import { EventEmitter, IEventEmitter } from '../utils/event-emitter';
+import { ExpectedQueryParams, hasExpectedQueryParams } from './utils';
 
 interface UserAuthenticateMessage { type: 'user/authenticate', payload: { username: string } }
 interface UserUnlinkMessage { type: 'user/unlink' }
@@ -54,6 +55,13 @@ export interface Props {
      * @default When not provided, the websocket server will be use the root path.
      */
     path?: string;
+
+    /**
+     * Query string parameters that all connections must provide in their connection url.
+     *
+     * For example: when it is set to { karmax: 'my-server-1-0-2' } a client should connect with 'ws:127.0.0.1:80/example?karmax=my-server-1-0-2'
+     */
+    queryParams?: ExpectedQueryParams;
   };
 
   /**
@@ -268,6 +276,7 @@ export function createServer(props?: Props): Server {
 
 class ServerImpl extends EventEmitter<Events> implements Server {
   private readonly httpServer: http.Server;
+  private readonly httpQueryParams: ExpectedQueryParams;
   private readonly logger: Logger;
   private readonly metadata: boolean;
   private readonly acceptNewUsers: boolean;
@@ -287,6 +296,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
 
   private constructor(props?: Props) {
     super();
+    this.httpQueryParams = props?.http?.queryParams || {};
     this.logger = props?.logger ?? ((severity: LogSeverity, ...args: unknown[]) => {
       severity !== 'debug' && console[severity](`[${severity}] [server]`, ...args);
     });
@@ -327,10 +337,16 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.logger('info', `listening on port ${address.port}`);
     this.emit('listen', address.port);
   }
-  private onConnectionOpen(socket: WebSocket): void {
+  private onConnectionOpen(socket: WebSocket, request: http.IncomingMessage): void {
     /* istanbul ignore next */
     if (this.status !== 'listening') {
       this.logger('debug', `incoming connection is immediately discarded as the server is ${this.status}`);
+      socket.close();
+      return;
+    }
+
+    if (!hasExpectedQueryParams(this.httpQueryParams, request.url)) {
+      this.logger('debug', 'incoming connection is immediately discarded as its query parameters are invalid');
       socket.close();
       return;
     }
