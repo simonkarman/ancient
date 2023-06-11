@@ -134,8 +134,9 @@ const KarmaxProvider: FC<PropsWithChildren<{
       if (typeof message === 'object' && message !== null && message && 'type' in message && typeof message.type === 'string') {
         if (message.type.startsWith('user/')) {
           karmanDispatch(message);
+        } else {
+          props.onMessage(message as { type: string });
         }
-        props.onMessage(message as { type: string });
       }
     };
     ws.current = socket;
@@ -149,22 +150,20 @@ const KarmaxProvider: FC<PropsWithChildren<{
   const isLinked = useKarmaxSelector((state) => state.isLinked);
   const users = useKarmaxSelector((state) => state.users);
   const latestLeaveReason = useKarmaxSelector((state) => state.latestLeaveReason);
-  return <>
-    <KarmaxContext.Provider value={{
-      isConnected: status === 'open',
-      username,
-      rejectionReason,
-      isLinked,
-      users,
-      latestLeaveReason,
-      authenticate,
-      send,
-      unlink,
-      leave,
-    }}>
-      {props.children}
-    </KarmaxContext.Provider>
-  </>;
+  return <KarmaxContext.Provider value={{
+    isConnected: status === 'open',
+    username,
+    rejectionReason,
+    isLinked,
+    users,
+    latestLeaveReason,
+    authenticate,
+    send,
+    unlink,
+    leave,
+  }}>
+    {props.children}
+  </KarmaxContext.Provider>;
 };
 
 export const Karmax: FC<PropsWithChildren<{
