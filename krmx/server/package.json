@@ -1,16 +1,19 @@
 {
-  "name": "karmax",
-  "version": "0.1.0",
-  "main": "src/index.ts",
-  "description": "karmax",
+  "name": "@krmx/server",
+  "version": "0.1.4",
+  "main": "dist/src/index.js",
+  "author": "Simon Karman",
+  "license": "ISC",
+  "homepage": "github.com/simonkarman/ancient",
+  "description": "krmx server",
   "scripts": {
     "start": "nodemon --exec \"ts-node src/index.ts\" src/index.ts",
     "test": "jest --coverage --silent --verbose",
-    "precommit": "npm run lint && npm run test",
-    "lint": "eslint . --ext .ts"
+    "precommit": "npm run lint && npm run test && npm run build",
+    "build": "rm -rf dist && tsc",
+    "lint": "eslint . --ext .ts",
+    "prepublishOnly": "npm install && npm run precommit"
   },
-  "author": "Simon Karman",
-  "license": "ISC",
   "dependencies": {
     "luxon": "^3.3.0",
     "short-uuid": "^4.2.2",

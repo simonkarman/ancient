@@ -1,4 +1,4 @@
-title ws-kar
+title @krmx
 
 actor "Client" as client
 participant "User @ Server\nundefined > user > linked" as server

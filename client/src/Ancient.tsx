@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Main } from './Main';
-import { Karmax } from './karmax';
+import { Krmx } from '@krmx/client';
 
 export function Ancient() {
   const [serverUrl] = useState('ws://localhost:8082/game?ancient&version=0.0.1');
@@ -15,12 +15,12 @@ export function Ancient() {
     </header>
     <hr className={'border'} />
     <main className={'container mx-auto grow px-4'}>
-      <Karmax
+      <Krmx
         serverUrl={serverUrl}
         onMessage={(message) => console.info(message)}
       >
         <Main />
-      </Karmax>
+      </Krmx>
     </main>
     <hr className={'border-2 border-gray-100'} />
     <footer className={'container mx-auto px-4 pb-4'}>

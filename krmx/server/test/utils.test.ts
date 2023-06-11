@@ -1,17 +1,17 @@
 import { hasExpectedQueryParams, ExpectedQueryParams } from '../src/utils';
 
-describe('Karmax Utils - hasExpectedQueryParams', () => {
+describe('Krmx Utils - hasExpectedQueryParams', () => {
   const scenarios: readonly (string | undefined)[] = [
     undefined,
     '',
     '/',
-    '?karmax',
-    '/?karmax',
-    '/abc?karmax',
-    '/abc?karmax=no',
-    '/abc?karmax=no&another=hello',
-    '/abc?karmax=yes',
-    '/abc?karmax=yes&another=hello',
+    '?krmx',
+    '/?krmx',
+    '/abc?krmx',
+    '/abc?krmx=no',
+    '/abc?krmx=no&another=hello',
+    '/abc?krmx=yes',
+    '/abc?krmx=yes&another=hello',
   ];
 
   it('should always return true when expected query params is empty', () => {
@@ -21,26 +21,26 @@ describe('Karmax Utils - hasExpectedQueryParams', () => {
     }
   });
   it('should return true for first three scenarios with expected value of false', () => {
-    const params: ExpectedQueryParams = { karmax: false };
+    const params: ExpectedQueryParams = { krmx: false };
     for (let i = 0; i < scenarios.length; i++) {
       expect(hasExpectedQueryParams(params, scenarios[i])).toBe(i < 3);
     }
   });
   it('should return true for all except the first three scenarios with expected value of true', () => {
-    const params: ExpectedQueryParams = { karmax: true };
+    const params: ExpectedQueryParams = { krmx: true };
     for (let i = 0; i < scenarios.length; i++) {
       expect(hasExpectedQueryParams(params, scenarios[i])).toBe(i >= 3);
     }
   });
   it('should return true for the last two scenarios with expected value of \'yes\'', () => {
-    const params: ExpectedQueryParams = { karmax: 'yes' };
+    const params: ExpectedQueryParams = { krmx: 'yes' };
     for (let i = 0; i < scenarios.length; i++) {
       console.info('checking', scenarios[i]);
       expect(hasExpectedQueryParams(params, scenarios[i])).toBe(i >= scenarios.length - 2);
     }
   });
   it('should return true for the last two scenarios with expected value of a function expecting \'yes\'', () => {
-    const params: ExpectedQueryParams = { karmax: (value: string) => value === 'yes' };
+    const params: ExpectedQueryParams = { krmx: (value: string) => value === 'yes' };
     for (let i = 0; i < scenarios.length; i++) {
       console.info('checking', scenarios[i]);
       expect(hasExpectedQueryParams(params, scenarios[i])).toBe(i >= scenarios.length - 2);

@@ -1,12 +1,12 @@
 import { monitorUsers } from './debug';
-import { createServer, LogSeverity } from 'karmax';
+import { createServer, LogSeverity } from '@krmx/server';
 
 const server = createServer({
   http: { path: 'game', queryParams: { ancient: true, version: '0.0.1' } },
   logger: ((severity: LogSeverity, ...args: unknown[]) => {
     console[severity](`[${severity}] [server]`, ...args);
   }),
-  isValidUsername: (username: string) => username.toLowerCase() === username, // TODO: should this be the default in Karmax?
+  isValidUsername: (username: string) => username.toLowerCase() === username, // TODO: should this be the default in Krmx?
 });
 monitorUsers(server);
 

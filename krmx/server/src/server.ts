@@ -59,7 +59,7 @@ export interface Props {
     /**
      * Query string parameters that all connections must provide in their connection url.
      *
-     * For example: when it is set to { karmax: 'my-server-1-0-2' } a client should connect with 'ws:127.0.0.1:80/example?karmax=my-server-1-0-2'
+     * For example: when it is set to { krmx: 'my-server-1-0-2' } a client should connect with 'ws:127.0.0.1:80/example?krmx=my-server-1-0-2'
      */
     queryParams?: ExpectedQueryParams;
   };
@@ -131,7 +131,7 @@ export interface User {
 }
 
 /**
- * A message
+ * A message.
  */
 export type Message = { type: string };
 

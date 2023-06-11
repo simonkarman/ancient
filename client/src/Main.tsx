@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useKarmax } from './karmax';
+import { useKrmx } from '@krmx/client';
 
 export function Main() {
-  const { isConnected, isLinked, authenticate, leave, send, users, rejectionReason } = useKarmax();
+  const { isConnected, isLinked, authenticate, leave, send, users, rejectionReason } = useKrmx();
   const [username, setUsername] = useState('');
   if (!isConnected) {
     return <p className='text-red-900'>No connection to server</p>;

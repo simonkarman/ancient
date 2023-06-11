@@ -3,7 +3,7 @@ import { AddressInfo } from 'ws';
 import { createServer, Status } from '../src';
 import { sleep, withCustomServer, withServer } from './server.test-utils';
 
-describe('Karmax Server', () => {
+describe('Krmx Server', () => {
   it('should cycle through all server statuses when starting and closing', async () => {
     const server = createServer();
     expect(server.getStatus()).toStrictEqual<Status>('initializing');
@@ -584,7 +584,7 @@ describe('Karmax Server', () => {
     }),
   );
 
-  it('should close a connection immediately when the karmax query parameter does not match the server name',
+  it('should close a connection immediately when the query parameter do not match',
     withCustomServer({ http: { queryParams: { 'something-else': true } } }, async ({ addUser }) => {
       await expect(addUser('simon')).rejects.toBe('connection closed');
     }),

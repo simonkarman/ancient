@@ -1,4 +1,4 @@
-import { Server } from 'karmax';
+import { Server } from '@krmx/server';
 
 export const monitorUsers = (server: Server) => {
   let counter = 0;

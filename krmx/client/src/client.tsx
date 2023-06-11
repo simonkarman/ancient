@@ -1,8 +1,9 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import React, { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Provider, TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import WebSocket from 'isomorphic-ws';
 
-const karmaxSlice = createSlice({
+const krmxSlice = createSlice({
   name: 'user',
   initialState: {
     username: '',
@@ -59,23 +60,23 @@ const karmaxSlice = createSlice({
     },
   },
 });
-const karmaxStore = configureStore({
-  reducer: karmaxSlice.reducer,
+const krmxStore = configureStore({
+  reducer: krmxSlice.reducer,
 });
-export type KarmaxState = ReturnType<typeof karmaxStore.getState>;
-export type KarmaxDispatch = typeof karmaxStore.dispatch;
-export const useKarmaxDispatch: () => KarmaxDispatch = useDispatch;
-export const useKarmaxSelector: TypedUseSelectorHook<KarmaxState> = useSelector;
+type KrmxState = ReturnType<typeof krmxStore.getState>;
+type KrmxDispatch = typeof krmxStore.dispatch;
+const useKrmxDispatch: () => KrmxDispatch = useDispatch;
+const useKrmxSelector: TypedUseSelectorHook<KrmxState> = useSelector;
 
 type MessageConsumer = <TMessage extends { type: string }>(message: TMessage) => void;
-type KarmaxContextProps = {
+type KrmxContextProps = {
   isConnected: boolean,
   authenticate: (username: string) => void,
   send: MessageConsumer,
   unlink: () => void,
   leave: () => void,
-} & KarmaxState;
-const KarmaxContext = createContext<KarmaxContextProps>({
+} & KrmxState;
+const KrmxContext = createContext<KrmxContextProps>({
   isConnected: false,
   isLinked: false,
   username: '',
@@ -87,17 +88,17 @@ const KarmaxContext = createContext<KarmaxContextProps>({
   unlink: () => {},
   leave: () => {},
 });
-export const useKarmax = function () {
-  return useContext(KarmaxContext);
+export const useKrmx = function () {
+  return useContext(KrmxContext);
 };
 
-const KarmaxProvider: FC<PropsWithChildren<{
+const KrmxProvider: FC<PropsWithChildren<{
   serverUrl: string,
   onMessage: MessageConsumer,
 }>> = (props) => {
   const ws = useRef(null as unknown as WebSocket);
   const [status, setStatus] = useState<'waiting' | 'open' | 'closed'>('waiting');
-  const karmanDispatch = useKarmaxDispatch();
+  const krmxDispatch = useKrmxDispatch();
 
   const send: MessageConsumer = useCallback((message) => {
     if (status !== 'open') { return; }
@@ -106,7 +107,7 @@ const KarmaxProvider: FC<PropsWithChildren<{
 
   const authenticate = useCallback((username: string) => {
     if (status !== 'open') { return; }
-    karmanDispatch(karmaxSlice.actions.reset({ username }));
+    krmxDispatch(krmxSlice.actions.reset({ username }));
     send({ type: 'user/authenticate', payload: { username } });
   }, [status, send]);
 
@@ -122,18 +123,19 @@ const KarmaxProvider: FC<PropsWithChildren<{
 
   useEffect(() => {
     const socket = new WebSocket(props.serverUrl);
+    socket.onerror = () => setStatus('closed');
     socket.onopen = () => {
       setStatus('open');
     };
     socket.onclose = () => {
-      karmanDispatch(karmaxSlice.actions.reset({ username: '' }));
+      krmxDispatch(krmxSlice.actions.reset({ username: '' }));
       setStatus('closed');
     };
-    socket.onmessage = (rawMessage) => {
+    socket.onmessage = (rawMessage: { data: string }) => {
       const message: unknown = JSON.parse(rawMessage.data);
       if (typeof message === 'object' && message !== null && message && 'type' in message && typeof message.type === 'string') {
         if (message.type.startsWith('user/')) {
-          karmanDispatch(message);
+          krmxDispatch(message);
         } else {
           props.onMessage(message as { type: string });
         }
@@ -145,12 +147,12 @@ const KarmaxProvider: FC<PropsWithChildren<{
     };
   }, [props]);
 
-  const username = useKarmaxSelector((state) => state.username);
-  const rejectionReason = useKarmaxSelector((state) => state.rejectionReason);
-  const isLinked = useKarmaxSelector((state) => state.isLinked);
-  const users = useKarmaxSelector((state) => state.users);
-  const latestLeaveReason = useKarmaxSelector((state) => state.latestLeaveReason);
-  return <KarmaxContext.Provider value={{
+  const username = useKrmxSelector((state) => state.username);
+  const rejectionReason = useKrmxSelector((state) => state.rejectionReason);
+  const isLinked = useKrmxSelector((state) => state.isLinked);
+  const users = useKrmxSelector((state) => state.users);
+  const latestLeaveReason = useKrmxSelector((state) => state.latestLeaveReason);
+  return <KrmxContext.Provider value={{
     isConnected: status === 'open',
     username,
     rejectionReason,
@@ -163,16 +165,16 @@ const KarmaxProvider: FC<PropsWithChildren<{
     leave,
   }}>
     {props.children}
-  </KarmaxContext.Provider>;
+  </KrmxContext.Provider>;
 };
 
-export const Karmax: FC<PropsWithChildren<{
+export const Krmx: FC<PropsWithChildren<{
   serverUrl: string,
   onMessage: MessageConsumer,
 }>> = (props) => {
-  return(<Provider store={karmaxStore}>
-    <KarmaxProvider {...props}>
+  return(<Provider store={krmxStore}>
+    <KrmxProvider {...props}>
       {props.children}
-    </KarmaxProvider>
+    </KrmxProvider>
   </Provider>);
 };
