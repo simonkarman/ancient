@@ -13,8 +13,11 @@ yarn add @krmx/client
 
 Then, you can create a simple React client using the following setup.
 ```typescript jsx
-import { Krmx, useKrmx } from '@krmx/client';
+import { KrmxProviderWithStore, useKrmx } from '@krmx/client';
 
+// Note: Don't use `KrmxProviderWithStore` if you are already creating a redux store in your app.
+//       In that case, add the exported `krmxSlice` to your store and use `KrmxProvider` directly.
+const { Krmx } = KrmxProviderWithStore();
 function MyApp() {
   const [serverUrl] = useState('ws://localhost:8082');
   return <Krmx
@@ -27,7 +30,7 @@ function MyApp() {
 
 function MyComponent() {
   const {
-    isConnected, isLinked, authenticate, leave, send, users, rejectionReason,
+    isConnected, isLinked, authenticate, rejectionReason, send, leave, users,
   } = useKrmx();
   if (!isConnected) {
     // Your logic for when you're not connected to the server goes here!

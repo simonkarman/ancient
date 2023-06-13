@@ -1,24 +1,30 @@
-import { monitorUsers } from './debug';
+import { game } from './game';
+import { monitorUsers } from './monitor';
 import { createServer, LogSeverity } from '@krmx/server';
 
-const server = createServer({
-  http: { path: 'game', queryParams: { ancient: true, version: '0.0.1' } },
+export const server = createServer({
+  http: { path: 'game', queryParams: { ancient: true, version: '0.0.2' } },
   logger: ((severity: LogSeverity, ...args: unknown[]) => {
-    console[severity](`[${severity}] [server]`, ...args);
+    if (severity === 'warn' || severity === 'error') {
+      console[severity](`[${severity}] [server]`, ...args);
+    }
   }),
-  isValidUsername: (username: string) => username.toLowerCase() === username, // TODO: should this be the default in Krmx?
 });
 monitorUsers(server);
-
-server.on('authenticate', (username, isNewUser, reject) => {
-  // TODO: you shouldn't verify username here (as that is part of isValidUsername too support server side joins), so do you really need it here?
-  if (isNewUser && server.getUsers().length > 4) {
-    reject('server is full');
-  }
-});
-
 server.on('message', (username, message) => {
   console.debug(`[debug] [ancient] ${username} sent ${message.type}`);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+const noop = () => {};
+game(server, {
+  log: true,
+  minPlayers: 2,
+  maxPlayers: 4,
+  onStart: noop,
+  onPause: noop,
+  onResume: noop,
+  onFinished: noop,
 });
 
 server.listen(8082);

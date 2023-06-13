@@ -98,7 +98,7 @@ export interface Props {
   /**
    * A predicate that determines what the server should consider to be a valid username.
    *
-   * @default When not provided, the server will validate usernames using the following regex: /^[a-zA-Z0-9]{3,20}$/.
+   * @default When not provided, the server will validate usernames using the following regex: /^[a-z0-9]{3,20}$/.
    */
   isValidUsername?: (username: string) => boolean;
 }
@@ -302,7 +302,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     });
     this.metadata = props?.metadata ?? false;
     this.acceptNewUsers = props?.acceptNewUsers ?? true;
-    this.isValidUsername = props?.isValidUsername ?? ((username: string) => /^[a-zA-Z0-9]{3,20}$/.test(username));
+    this.isValidUsername = props?.isValidUsername ?? ((username: string) => /^[a-z0-9]{3,20}$/.test(username));
 
     this.status = 'initializing';
     this.httpServer = props?.http?.server ?? new http.Server();

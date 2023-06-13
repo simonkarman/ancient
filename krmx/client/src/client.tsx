@@ -1,9 +1,9 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import React, { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Provider, TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import { Provider, useDispatch, useSelector } from 'react-redux';
 import WebSocket from 'isomorphic-ws';
 
-const krmxSlice = createSlice({
+export const krmxSlice = createSlice({
   name: 'user',
   initialState: {
     username: '',
@@ -60,13 +60,7 @@ const krmxSlice = createSlice({
     },
   },
 });
-const krmxStore = configureStore({
-  reducer: krmxSlice.reducer,
-});
-type KrmxState = ReturnType<typeof krmxStore.getState>;
-type KrmxDispatch = typeof krmxStore.dispatch;
-const useKrmxDispatch: () => KrmxDispatch = useDispatch;
-const useKrmxSelector: TypedUseSelectorHook<KrmxState> = useSelector;
+export type KrmxState = ReturnType<typeof krmxSlice.getInitialState>;
 
 type MessageConsumer = <TMessage extends { type: string }>(message: TMessage) => void;
 type KrmxContextProps = {
@@ -92,13 +86,15 @@ export const useKrmx = function () {
   return useContext(KrmxContext);
 };
 
-const KrmxProvider: FC<PropsWithChildren<{
+export const KrmxProvider: FC<PropsWithChildren<{
   serverUrl: string,
   onMessage: MessageConsumer,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  krmxStateSelector: (state: any) => KrmxState;
 }>> = (props) => {
   const ws = useRef(null as unknown as WebSocket);
   const [status, setStatus] = useState<'waiting' | 'open' | 'closed'>('waiting');
-  const krmxDispatch = useKrmxDispatch();
+  const dispatch = useDispatch();
 
   const send: MessageConsumer = useCallback((message) => {
     if (status !== 'open') { return; }
@@ -107,7 +103,7 @@ const KrmxProvider: FC<PropsWithChildren<{
 
   const authenticate = useCallback((username: string) => {
     if (status !== 'open') { return; }
-    krmxDispatch(krmxSlice.actions.reset({ username }));
+    dispatch(krmxSlice.actions.reset({ username }));
     send({ type: 'user/authenticate', payload: { username } });
   }, [status, send]);
 
@@ -128,14 +124,14 @@ const KrmxProvider: FC<PropsWithChildren<{
       setStatus('open');
     };
     socket.onclose = () => {
-      krmxDispatch(krmxSlice.actions.reset({ username: '' }));
+      dispatch(krmxSlice.actions.reset({ username: '' }));
       setStatus('closed');
     };
-    socket.onmessage = (rawMessage: { data: string }) => {
-      const message: unknown = JSON.parse(rawMessage.data);
+    socket.onmessage = (rawMessage: { data: string | Buffer | ArrayBuffer | Buffer[] }) => {
+      const message: unknown = JSON.parse(rawMessage.data.toString());
       if (typeof message === 'object' && message !== null && message && 'type' in message && typeof message.type === 'string') {
         if (message.type.startsWith('user/')) {
-          krmxDispatch(message);
+          dispatch(message);
         } else {
           props.onMessage(message as { type: string });
         }
@@ -147,11 +143,11 @@ const KrmxProvider: FC<PropsWithChildren<{
     };
   }, [props]);
 
-  const username = useKrmxSelector((state) => state.username);
-  const rejectionReason = useKrmxSelector((state) => state.rejectionReason);
-  const isLinked = useKrmxSelector((state) => state.isLinked);
-  const users = useKrmxSelector((state) => state.users);
-  const latestLeaveReason = useKrmxSelector((state) => state.latestLeaveReason);
+  const username = useSelector((state) => props.krmxStateSelector(state).username);
+  const rejectionReason = useSelector((state) => props.krmxStateSelector(state).rejectionReason);
+  const isLinked = useSelector((state) => props.krmxStateSelector(state).isLinked);
+  const users = useSelector((state) => props.krmxStateSelector(state).users);
+  const latestLeaveReason = useSelector((state) => props.krmxStateSelector(state).latestLeaveReason);
   return <KrmxContext.Provider value={{
     isConnected: status === 'open',
     username,
@@ -168,13 +164,31 @@ const KrmxProvider: FC<PropsWithChildren<{
   </KrmxContext.Provider>;
 };
 
-export const Krmx: FC<PropsWithChildren<{
-  serverUrl: string,
-  onMessage: MessageConsumer,
-}>> = (props) => {
-  return(<Provider store={krmxStore}>
-    <KrmxProvider {...props}>
-      {props.children}
-    </KrmxProvider>
-  </Provider>);
-};
+/**
+ * Note: Don't use this if you are already creating a redux store in your app. In that case, add the krmxSlice to your store and use KrmxProvider
+ *  directly.
+ *
+ * Usage
+ * ```ts
+ * const { Krmx: KrmxComponentWithStore } = KrmxProviderWithStore();
+ * const MyComponent = () => {
+ *   return <Krmx serverUrl={...} onMessage={...}>
+ *     ...
+ *   </Krmx>
+ * }
+ * ```
+ */
+export function KrmxProviderWithStore(): { Krmx: FC<PropsWithChildren<{serverUrl: string, onMessage: MessageConsumer}>>} {
+  const krmxStore = configureStore({
+    reducer: krmxSlice.reducer,
+  });
+  return {
+    Krmx: (props: PropsWithChildren<{serverUrl: string, onMessage: MessageConsumer}>) => {
+      return (<Provider store={krmxStore}>
+        <KrmxProvider krmxStateSelector={(state: KrmxState) => state} {...props}>
+          {props.children}
+        </KrmxProvider>
+      </Provider>);
+    },
+  };
+}

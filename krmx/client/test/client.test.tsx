@@ -1,7 +1,8 @@
 import React from 'react';
 import { create } from 'react-test-renderer';
-import { Krmx, useKrmx } from '../src';
+import { KrmxProviderWithStore, useKrmx } from '../src';
 
+const { Krmx } = KrmxProviderWithStore();
 function MyApp(props: { serverUrl: string }) {
   return <Krmx
     serverUrl={props.serverUrl}
@@ -13,7 +14,7 @@ function MyApp(props: { serverUrl: string }) {
 
 function MyComponent() {
   const {
-    isConnected, isLinked, authenticate, leave, send, users, rejectionReason,
+    isConnected, isLinked, authenticate, rejectionReason, send, leave, users,
   } = useKrmx();
   if (!isConnected) {
     // Your logic for when you're not connected to the server goes here!

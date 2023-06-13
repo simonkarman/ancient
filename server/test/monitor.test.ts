@@ -1,6 +1,6 @@
-import { monitorUsers } from '../src/debug';
+import { monitorUsers } from '../src/monitor';
 
-describe('Debug', () => {
+describe('Monitor', () => {
   it('monitor users should be a function', () => {
     expect(monitorUsers).toStrictEqual(expect.any(Function));
   });

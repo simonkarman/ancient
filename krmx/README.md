@@ -12,13 +12,12 @@ Both are published on npm under the [krmx](https://www.npmjs.com/org/krmx) organ
 There are different components that together form the krmx protocol. Each has its own upcoming features.
 
 ### krmx base
-1. krmx Client - Add client for krmx that also emits events in the same way as the server
-2. Middleware - Create support for middleware (game / matchmaking / custom...)
-3. Hot Reloading: Emit event that allows writing server state to disk on exit (or state change) and allow to restart a server with state
-4. Identities - Using JWT in authenticate message for credentials
-5. Connection Cleanup - Close unresponsive (verify with ping pong) connections and close connections that are not accepted after X seconds
-6. CLI Startup - Add cli command to start a new server on specific port (and with specific user(s) allowed to join)
-7. CLI Output - Show server output (connected users) via a self updating user table such as k9s output
+1. Middleware - Create support for middleware (game / matchmaking / custom...)
+2. Hot Reloading: Emit event that allows writing server state to disk on exit (or state change) and allow to restart a server with state
+3. Identities - Using JWT in authenticate message for credentials
+4. Connection Cleanup - Close unresponsive (verify with ping pong) connections and close connections that are not accepted after X seconds
+5. CLI Startup - Add cli command to start a new server on specific port (and with specific user(s) allowed to join)
+6. CLI Output - Show server output (connected users) via a self updating user table such as k9s output
 
 ### krmx game middleware
 1. Ready Up - Add pre game ready up phase where players can join/leave and accept to play and once everyone is ready start the game
