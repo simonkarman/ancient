@@ -15,16 +15,10 @@ server.on('message', (username, message) => {
   console.debug(`[debug] [ancient] ${username} sent ${message.type}`);
 });
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const noop = () => {};
 game(server, {
   log: true,
   minPlayers: 2,
   maxPlayers: 4,
-  onStart: noop,
-  onPause: noop,
-  onResume: noop,
-  onFinished: noop,
 });
 
 server.listen(8082);

@@ -6,17 +6,10 @@ import WebSocket from 'isomorphic-ws';
 export const krmxSlice = createSlice({
   name: 'user',
   initialState: {
-    username: '',
-    rejectionReason: undefined,
-    isLinked: false,
-    users: {},
-    latestLeaveReason: undefined,
-  } as {
-    username: string;
-    rejectionReason: string | undefined;
-    isLinked: boolean;
-    users: { [username: string]: { isLinked: boolean}};
-    latestLeaveReason: string | undefined;
+    username: '' as string,
+    rejectionReason: undefined as (string | undefined),
+    isLinked: false as boolean,
+    users: {} as { [username: string]: { isLinked: boolean}},
   },
   reducers: {
     reset: (_, action: PayloadAction<{ username: string }>) => {
@@ -27,9 +20,6 @@ export const krmxSlice = createSlice({
         users: {},
         latestLeaveReason: undefined,
       };
-    },
-    resetLatestLeaveReason: (state) => {
-      state.latestLeaveReason = undefined;
     },
     accepted: (state) => {
       state.rejectionReason = undefined;
@@ -55,7 +45,6 @@ export const krmxSlice = createSlice({
       state.users[username].isLinked = false;
     },
     left: (state, action: PayloadAction<{ username: string, reason: string }>) => {
-      state.latestLeaveReason = `User '${action.payload.username}' left the server, reason: ${action.payload.reason}.`;
       delete state.users[action.payload.username];
     },
   },
@@ -65,7 +54,7 @@ export type KrmxState = ReturnType<typeof krmxSlice.getInitialState>;
 type MessageConsumer = <TMessage extends { type: string }>(message: TMessage) => void;
 type KrmxContextProps = {
   isConnected: boolean,
-  authenticate: (username: string) => void,
+  link: (username: string) => void,
   send: MessageConsumer,
   unlink: () => void,
   leave: () => void,
@@ -75,9 +64,8 @@ const KrmxContext = createContext<KrmxContextProps>({
   isLinked: false,
   username: '',
   rejectionReason: undefined,
-  latestLeaveReason: undefined,
   users: {},
-  authenticate: () => {},
+  link: () => {},
   send: () => {},
   unlink: () => {},
   leave: () => {},
@@ -101,10 +89,10 @@ export const KrmxProvider: FC<PropsWithChildren<{
     ws.current?.send(JSON.stringify(message));
   }, [status, ws]);
 
-  const authenticate = useCallback((username: string) => {
+  const link = useCallback((username: string) => {
     if (status !== 'open') { return; }
     dispatch(krmxSlice.actions.reset({ username }));
-    send({ type: 'user/authenticate', payload: { username } });
+    send({ type: 'user/link', payload: { username } });
   }, [status, send]);
 
   const unlink = useCallback(() => {
@@ -147,15 +135,13 @@ export const KrmxProvider: FC<PropsWithChildren<{
   const rejectionReason = useSelector((state) => props.krmxStateSelector(state).rejectionReason);
   const isLinked = useSelector((state) => props.krmxStateSelector(state).isLinked);
   const users = useSelector((state) => props.krmxStateSelector(state).users);
-  const latestLeaveReason = useSelector((state) => props.krmxStateSelector(state).latestLeaveReason);
   return <KrmxContext.Provider value={{
     isConnected: status === 'open',
     username,
     rejectionReason,
     isLinked,
     users,
-    latestLeaveReason,
-    authenticate,
+    link,
     send,
     unlink,
     leave,

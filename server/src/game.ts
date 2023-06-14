@@ -6,10 +6,10 @@ export const game = (
     log: boolean,
     maxPlayers: number,
     minPlayers: number,
-    onStart: (players: string[]) => void,
-    onPause: () => void,
-    onResume: () => void,
-    onFinished: () => void,
+    onStart?: (players: string[]) => void,
+    onPause?: () => void,
+    onResume?: () => void,
+    onFinished?: () => void,
   },
 ) => {
   const log = (...args: unknown[]) => {
@@ -45,7 +45,7 @@ export const game = (
         phase = 'playing';
         log('game has resumed');
         server.broadcast({ type: 'game/resumed' });
-        props.onResume();
+        props.onResume && props.onResume();
       }
     }
   });
@@ -58,7 +58,7 @@ export const game = (
         phase = 'paused';
         log('game has paused');
         server.broadcast({ type: 'game/paused' });
-        props.onPause();
+        props.onPause && props.onPause();
       }
     }
   });
@@ -71,7 +71,7 @@ export const game = (
         phase = 'finished';
         log('game has finished');
         server.broadcast({ type: 'game/finished' });
-        props.onFinished();
+        props.onFinished && props.onFinished();
       }
     }
   });
@@ -85,7 +85,7 @@ export const game = (
           phase = 'playing';
           log('game has started');
           server.broadcast({ type: 'game/started' });
-          props.onStart(allPlayers.map(player => player.username));
+          props.onStart && props.onStart(allPlayers.map(player => player.username));
         }
       }
     }

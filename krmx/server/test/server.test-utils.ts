@@ -10,7 +10,7 @@ export interface ServerEmit {
   join: jest.Mock<void, [string]>;
   link: jest.Mock<void, [string]>;
   unlink: jest.Mock<void, [string]>;
-  leave: jest.Mock<void, [string, string]>;
+  leave: jest.Mock<void, [string]>;
   message: jest.Mock<void, [string, { type: string }]>;
 }
 
@@ -59,7 +59,7 @@ export function withCustomServer<TScenario>(serverProps: Props, callback: (props
     server.on('join', (username) => serverEmit.join(username));
     server.on('link', (username) => serverEmit.link(username));
     server.on('unlink', (username) => serverEmit.unlink(username));
-    server.on('leave', (username, reason) => {serverEmit.leave(username, reason);});
+    server.on('leave', (username) => {serverEmit.leave(username);});
     server.on('message', (username, message) => {serverEmit.message(username, message);});
 
     const port = await new Promise<number>((resolve) => {
@@ -91,8 +91,8 @@ export function withCustomServer<TScenario>(serverProps: Props, callback: (props
             }
           });
           user.on('open', () => {
-            const userAuthenticateMessage = { type: 'user/authenticate', payload: { username } };
-            user.send(JSON.stringify(userAuthenticateMessage));
+            const userLinkMessage = { type: 'user/link', payload: { username } };
+            user.send(JSON.stringify(userLinkMessage));
           });
           user.on('close', () => reject('connection closed'));
         });

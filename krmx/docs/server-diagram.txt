@@ -1,3 +1,4 @@
+# https://sequencediagram.org/
 title @krmx
 
 actor "Client" as client
@@ -6,11 +7,11 @@ participant "Server Logic" as backend
 
 group join
 client-->server: <open>
-server-xclient: server will close connection on anything else than user/authenticate\nor when too long (in time and attempts) before authenticated
-loop connection remains open and unlinked until authentication is accepted
-client->server: user/authenticate
+server-xclient: server will send rejected on anything else than user/link
+loop connection remains open and unlinked until link is accepted
+client->server: user/link
 space -4
-server->backend: on(authenticate: username, is new user, auth details, rejectCallback)
+server->backend: on(authenticate: username, is new user, rejectCallback)
 space -2
 backend->server: reject(reason)
 space -4
@@ -29,7 +30,7 @@ space -3.5
 client<:4-server: user/linked
 end
 
-group custom appication logic
+group custom application logic
 client->server: custom/from-connection-message
 space -4
 server->backend: on(message: username from-connection-message)
@@ -43,11 +44,9 @@ end
 
 group unlink
 client-->server: <close>
-client->server: on user/unlink (or any invalid format or user/authenticate\nwhen already accepted or any from-server message)
+client->server: on user/unlink (or any invalid format or user/link\nwhen already linked or any from-server message)
 space-4
 backend->server: unlink(username)
-server->client: user/rejected
-space -3
 server->backend: on(unlink: username)
 space -4
 server-:4>client: user/unlinked
@@ -62,13 +61,17 @@ space -4
 backend->server: leave(username) or leave(username)
 space -2
 server-:4>client: user/unlinked
+space -4
+server->backend: on(unlink: username)
 deactivate server
 server-:4>client: user/left
+space -4
+server->backend: on(leave: username)
 deactivate server
 end
 
 group server side join (unlinked)
-backend->server: join(username, auth details)
+backend->server: join(username)
 activate server
 space -3.5
 client<:4-server: user/joined

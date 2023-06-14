@@ -5,17 +5,17 @@ import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
 import { EventEmitter, IEventEmitter } from './event-emitter';
 import { ExpectedQueryParams, hasExpectedQueryParams } from './utils';
 
-interface UserAuthenticateMessage { type: 'user/authenticate', payload: { username: string } }
+interface UserLinkMessage { type: 'user/link', payload: { username: string } }
 interface UserUnlinkMessage { type: 'user/unlink' }
 interface UserLeaveMessage { type: 'user/leave' }
-type FromConnectionMessage = UserAuthenticateMessage | UserUnlinkMessage | UserLeaveMessage;
+type FromConnectionMessage = UserLinkMessage | UserUnlinkMessage | UserLeaveMessage;
 
 interface UserRejectedMessage { type: 'user/rejected', payload: { reason: string } }
 interface UserAcceptedMessage { type: 'user/accepted' }
 interface UserJoinedMessage { type: 'user/joined', payload: { username: string } }
 interface UserLinkedMessage { type: 'user/linked', payload: { username: string } }
 interface UserUnlinkedMessage { type: 'user/unlinked', payload: { username: string } }
-interface UserLeftMessage { type: 'user/left', payload: { username: string, reason: string } }
+interface UserLeftMessage { type: 'user/left', payload: { username: string } }
 type FromServerMessage = UserRejectedMessage | UserAcceptedMessage | UserJoinedMessage |
   UserLinkedMessage | UserUnlinkedMessage | UserLeftMessage;
 
@@ -89,7 +89,7 @@ export interface Props {
   metadata?: boolean;
 
   /**
-   * Whether the server should accept new users. If set to false, only users joined via server.join(<username>) can use the server.
+   * Whether the server should accept new users. If set to false, only users joined via server.join(<username>) can join the server.
    *
    * @default When not provided, the server will accept new users.
    */
@@ -149,11 +149,11 @@ type Events = {
   close: [];
 
   /**
-   * This event is emitted every time a connection tries to authenticate as a user.
+   * This event is emitted before a connection tries to link to a user.
    *
-   * @param username The username that the connection is trying to authenticate as.
-   * @param isNewUser Whether this username belongs to a user already know to the server (false) or a new user that will be created if authentication succeeds (true).
-   * @param reject A reject callback that, if invoked, will reject the authentication with the provided reason.
+   * @param username The username that the connection is trying to link to.
+   * @param isNewUser Whether this username belongs to a user already known to the server (false) or a new user that will be created if linking succeeds (true).
+   * @param reject A reject callback that, if invoked, will reject the linking to the user with the provided reason.
    */
   authenticate: [username: string, isNewUser: boolean, reject: (reason: string) => void];
 
@@ -182,9 +182,8 @@ type Events = {
    * This event is emitted every time a user has left.
    *
    * @param username The username of the user that left.
-   * @param reason The reason why the user left the server.
    */
-  leave: [username: string, reason: string];
+  leave: [username: string];
 
   /**
    * This event is emitted every time a user sends a message to the server.
@@ -406,12 +405,12 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       this.sendTo(connectionId, userRejectedMessage, false);
       rejected = true;
     };
-    if (message.type !== 'user/authenticate') {
-      reject('unauthenticated');
+    if (message.type !== 'user/link') {
+      reject('unlinked connection');
       return;
     }
     if (!('payload' in message) || typeof (message.payload.username as unknown) !== 'string') {
-      reject('invalid authentication');
+      reject('invalid link request');
       return;
     }
     const { username } = message.payload;
@@ -442,12 +441,12 @@ class ServerImpl extends EventEmitter<Events> implements Server {
   }
   private onLinkedConnectionMessage(username: string, message: FromConnectionMessage | Message) {
     switch (message.type) {
-    case 'user/authenticate':
+    case 'user/link':
     case 'user/unlink':
       this.unlink(username);
       break;
     case 'user/leave':
-      this.leave(username, 'voluntary');
+      this.leave(username);
       break;
     default:
       if (message.type.startsWith('user/')) {
@@ -475,7 +474,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.status = 'closing';
     this.logger('info', 'server is closing');
     for (const username in this.users) {
-      this.leave(username, 'server closing');
+      this.leave(username);
     }
     this.httpServer.close();
     this.httpServer.closeAllConnections();
@@ -591,16 +590,16 @@ class ServerImpl extends EventEmitter<Events> implements Server {
       throw new Error('cannot kick a user that does not exist');
     }
     this.logger('info', `${username} kicked`);
-    this.leave(username, 'kicked');
+    this.leave(username);
   }
-  private leave(username: string, reason: string): void {
+  private leave(username: string): void {
     this.canOnly('leave a user', ['listening', 'closing']);
     /* istanbul ignore next */
     if (this.users[username] === undefined) {
       throw new Error('cannot leave a user that does not exist');
     }
     const { connectionId } = this.users[username];
-    const userLeftMessage: UserLeftMessage = { type: 'user/left', payload: { username, reason } };
+    const userLeftMessage: UserLeftMessage = { type: 'user/left', payload: { username } };
     if (connectionId !== undefined) {
       this.unlink(username);
       this.sendTo(connectionId, userLeftMessage, true);
@@ -608,7 +607,7 @@ class ServerImpl extends EventEmitter<Events> implements Server {
     this.logger('info', `${username} left`);
     this.broadcast(userLeftMessage);
     delete this.users[username];
-    this.emit('leave', username, reason);
+    this.emit('leave', username);
   }
 
   public getStatus(): Status {

@@ -14,20 +14,20 @@ function MyApp(props: { serverUrl: string }) {
 
 function MyComponent() {
   const {
-    isConnected, isLinked, authenticate, rejectionReason, send, leave, users,
+    isConnected, isLinked, link, rejectionReason, send, leave, users,
   } = useKrmx();
   if (!isConnected) {
-    // Your logic for when you're not connected to the server goes here!
+    // Your logic for when you're not connected to the server goes here
     return <p>No connection to the server...</p>;
   }
   if (!isLinked) {
-    // Your logic for authenticating with the server goes here!
+    // Your logic for linking your connection with a user goes here
     return <div>
-      <button onClick={() => authenticate('simon')}>Join!</button>
+      <button onClick={() => link('simon')}>Join!</button>
       {rejectionReason && <p>Rejected: {rejectionReason}</p>}
     </div>;
   }
-  // Your logic for when you're ready to go goes here!
+  // Your logic for when you're ready to go goes here
   return (<div>
     <p>
       Welcome <strong>simon</strong>!

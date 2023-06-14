@@ -3,7 +3,7 @@ import { useKrmx } from '@krmx/client';
 import { AppState, useAppDispatch, useAppSelector } from './store';
 
 export function Ancient() {
-  const { isConnected, isLinked, authenticate, leave, send, users, rejectionReason, username } = useKrmx();
+  const { isConnected, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
   const appDispatch = useAppDispatch();
   useEffect(() => {
     if (isLinked === false) {
@@ -30,7 +30,7 @@ export function Ancient() {
       />
       <button
         className='ml-2 transition-colors border p-2 hover:bg-green-400'
-        onClick={() => authenticate(joinUsername)}>
+        onClick={() => link(joinUsername)}>
         Join
       </button>
       <br/>

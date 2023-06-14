@@ -77,7 +77,7 @@ describe('Krmx Server', () => {
     }),
   );
 
-  it('should accept a user with a valid authentication message',
+  it('should accept a user with a valid link message',
     withServer(async ({ serverEmit, addUser }) => {
       const simon = await addUser('simon');
       await sleep();
@@ -88,26 +88,26 @@ describe('Krmx Server', () => {
     }),
   );
 
-  it('should reject authentication when an invalid authenticate message is received',
+  it('should reject authentication when an invalid link message is received',
     withServer(async ({ addUser, scenario }) => {
       const user = await addUser();
       user.send(scenario.value);
       await sleep();
-      expect(user.emit.message).toHaveBeenCalledWith({ type: 'user/rejected', payload: { reason: 'invalid authentication' } });
+      expect(user.emit.message).toHaveBeenCalledWith({ type: 'user/rejected', payload: { reason: 'invalid link request' } });
       expect(user.emit.close).not.toHaveBeenCalled();
     }, [
-      { type: 'user/authenticate', payload: { username: 11 } },
-      { type: 'user/authenticate', payload: { missing: 'incorrect' } },
-      { type: 'user/authenticate', payload: 3 },
-      { type: 'user/authenticate' },
+      { type: 'user/link', payload: { username: 11 } },
+      { type: 'user/link', payload: { missing: 'incorrect' } },
+      { type: 'user/link', payload: 3 },
+      { type: 'user/link' },
     ]),
   );
 
-  it('should unlink a connection when it sends an authenticate message when already linked to a user',
+  it('should unlink a connection when it sends an link message when already linked to a user',
     withServer(async ({ serverEmit, addUser }) => {
       const simon = await addUser('simon');
-      const authenticateMessage = { type: 'user/authenticate', payload: { username: 'simon' } };
-      simon.send(authenticateMessage);
+      const linkMessage = { type: 'user/link', payload: { username: 'simon' } };
+      simon.send(linkMessage);
       await sleep();
       expect(serverEmit.unlink).toHaveBeenCalledWith('simon');
       expect(simon.emit.message).toHaveBeenCalledWith({ type: 'user/unlinked', payload: { username: 'simon' } });
@@ -115,7 +115,7 @@ describe('Krmx Server', () => {
     }),
   );
 
-  it('should not emit events when a connection connects and closes before authenticating',
+  it('should not emit events when a connection connects and closes before linking',
     withServer(async ({ serverEmit, addUser }) => {
       const user = await addUser();
       user.send({ type: 'something' });
@@ -128,21 +128,21 @@ describe('Krmx Server', () => {
     }),
   );
 
-  it('should reject authentication when any custom message is sent before authenticating',
+  it('should reject when any custom message is sent before linking',
     withServer(async ({ addUser, serverEmit }) => {
       const user = await addUser();
       user.send({ type: 'custom/something' });
       await sleep();
       expect(user.emit.message).toHaveBeenCalledWith({
         type: 'user/rejected',
-        payload: { reason: 'unauthenticated' },
+        payload: { reason: 'unlinked connection' },
       });
       expect(user.emit.close).not.toHaveBeenCalled();
       expect(serverEmit.message).not.toHaveBeenCalled();
     }),
   );
 
-  it('should reject a user authenticating with a username that is already linked to a connection',
+  it('should reject a user linking with a username that is already linked to a connection',
     withServer(async ({ addUser }) => {
       await addUser('simon');
       await addUser('lisa');
@@ -176,7 +176,7 @@ describe('Krmx Server', () => {
     }, invalidJsonMessages),
   );
 
-  it('should unlink a user if it sends a message starting with user/ that is not a authenticate, unlink, or leave message',
+  it('should unlink a user if it sends a message starting with user/ that is not a link, unlink, or leave message',
     withServer(async({ serverEmit, addUser, scenario }) => {
       const username = `simon${scenario.index}`;
       const user = await addUser(username);
@@ -184,10 +184,12 @@ describe('Krmx Server', () => {
       await sleep();
       expect(serverEmit.unlink).toHaveBeenCalledWith(username);
     }, [
-      { type: 'user/linked' },
-      { type: 'user/unlinked' },
       { type: 'user/accepted' },
       { type: 'user/rejected' },
+      { type: 'user/joined' },
+      { type: 'user/linked' },
+      { type: 'user/unlinked' },
+      { type: 'user/left' },
       { type: 'user/custom' },
       { type: 'user/' },
     ]),
@@ -282,12 +284,12 @@ describe('Krmx Server', () => {
         type: 'user/unlinked', payload: { username: 'lisa' },
       });
       expect(simon.emit.message).toHaveBeenLastCalledWith({
-        type: 'user/left', payload: { username: 'lisa', reason: 'voluntary' },
+        type: 'user/left', payload: { username: 'lisa' },
       });
-      expect(serverEmit.leave).toHaveBeenCalledWith('lisa', 'voluntary');
+      expect(serverEmit.leave).toHaveBeenCalledWith('lisa');
       expect(lisa.emit.close).not.toBeCalled();
       expect(lisa.emit.message).toHaveBeenLastCalledWith({
-        type: 'user/left', payload: { username: 'lisa', reason: 'voluntary' },
+        type: 'user/left', payload: { username: 'lisa' },
       });
       expect(server.getUsers()).toStrictEqual([
         { username: 'simon', isLinked: true },
@@ -434,17 +436,17 @@ describe('Krmx Server', () => {
     }),
   );
 
-  it('should allow a connection to authenticate correctly after it was rejected before',
+  it('should allow a connection to link after it was rejected before',
     withServer(async ({ server, addUser }) => {
       await addUser('simon');
       const user = await addUser();
       await sleep();
-      user.send({ type: 'user/authenticate', payload: { username: 'simon' } });
+      user.send({ type: 'user/link', payload: { username: 'simon' } });
       await sleep();
       expect(user.emit.message).toHaveBeenCalledWith({
         type: 'user/rejected', payload: { reason: 'user simon is already linked to a connection' },
       });
-      user.send({ type: 'user/authenticate', payload: { username: 'lisa' } });
+      user.send({ type: 'user/link', payload: { username: 'lisa' } });
       await sleep();
       expect(user.emit.message).toHaveBeenCalledWith({ type: 'user/accepted' });
     }),
@@ -477,13 +479,13 @@ describe('Krmx Server', () => {
       server.kick('simon');
       await sleep();
       const userUnlinkedMessage = { type: 'user/unlinked', payload: { username: 'simon' } };
-      const userLeftMessage = { type: 'user/left', payload: { username: 'simon', reason: 'kicked' } };
+      const userLeftMessage = { type: 'user/left', payload: { username: 'simon' } };
       expect(simon.emit.message).toHaveBeenCalledWith(userUnlinkedMessage);
       expect(simon.emit.message).toHaveBeenCalledWith(userLeftMessage);
       expect(simon.emit.close).not.toHaveBeenCalled();
       expect(lisa.emit.message).toHaveBeenCalledWith(userUnlinkedMessage);
       expect(lisa.emit.message).toHaveBeenCalledWith(userLeftMessage);
-      expect(serverEmit.leave).toHaveBeenCalledWith('simon', 'kicked');
+      expect(serverEmit.leave).toHaveBeenCalledWith('simon');
       expect(server.getUsers()).toStrictEqual([
         { username: 'lisa', isLinked: true },
       ]);
@@ -499,7 +501,7 @@ describe('Krmx Server', () => {
       server.kick('simon');
       await sleep();
       expect(serverEmit.unlink).not.toHaveBeenCalled();
-      expect(serverEmit.leave).toHaveBeenCalledWith('simon', 'kicked');
+      expect(serverEmit.leave).toHaveBeenCalledWith('simon');
       expect(server.getUsers()).toStrictEqual([]);
     }),
   );
