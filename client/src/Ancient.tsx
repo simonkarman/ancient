@@ -1,20 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useKrmx } from '@krmx/client';
-import { AppState, useAppDispatch, useAppSelector } from './store';
+import { Cards } from './Cards';
+import { cardsSlice } from './store/cards';
+import { gameSlice } from './store/game';
+import { AppState, useAppDispatch, useAppSelector } from './store/store';
 
 export function Ancient() {
   const { isConnected, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
-  const appDispatch = useAppDispatch();
+  const dispatch = useAppDispatch();
   useEffect(() => {
     if (isLinked === false) {
-      appDispatch({ type: 'game/reset' });
+      dispatch(gameSlice.actions.reset());
     }
-  }, [appDispatch, isConnected, isLinked]);
+  }, [dispatch, isConnected, isLinked]);
   const [joinUsername, setJoinUsername] = useState('');
   const phase = useAppSelector((state: AppState) => state?.game.phase);
   const players = useAppSelector((state: AppState) => state?.game.players);
   useEffect(() => {
     document.title = username.length === 0 ? 'Ancient' : `Ancient - ${username}`;
+    dispatch(cardsSlice.actions.reset({ self: username }));
   }, [username]);
   if (!isConnected) {
     return <p className='text-red-900'>No connection to server</p>;
@@ -96,16 +100,9 @@ export function Ancient() {
   };
   const Game = () => {
     return <>
-      <h2 className='text-lg'>Ancient</h2>
-      <p>There is nothing here yet...</p>
+      <Cards />
       <button
-        className='mt-2 mr-2 transition-colors border p-2 hover:bg-blue-400'
-        onClick={() => send({ type: 'custom/hello' })}
-      >
-        Send custom/hello
-      </button>
-      <button
-        className='transition-colors border p-2 hover:bg-red-400'
+        className='mt-2 transition-colors border p-2 hover:bg-red-400'
         onClick={leave}
       >
         Abandon

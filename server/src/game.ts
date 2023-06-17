@@ -1,4 +1,4 @@
-import { Server } from '@krmx/server';
+import { Message, Server } from '@krmx/server';
 
 export const game = (
   server: Server,
@@ -10,8 +10,9 @@ export const game = (
     onPause?: () => void,
     onResume?: () => void,
     onFinished?: () => void,
+    onMessage?: (username:string, message: Message) => void,
   },
-) => {
+): { finish: () => void } => {
   const log = (...args: unknown[]) => {
     props.log && console.info('[info] [game]', ...args);
   };
@@ -62,17 +63,20 @@ export const game = (
       }
     }
   });
+  const finish = (): void => {
+    if (phase !== 'finished') {
+      phase = 'finished';
+      log('game has finished');
+      server.broadcast({ type: 'game/finished' });
+      props.onFinished && props.onFinished();
+    }
+  };
   server.on('leave', (username: string) => {
     if (phase === 'lobby') {
       delete players[username];
     } else {
       players[username].isReady = false;
-      if (phase !== 'finished') {
-        phase = 'finished';
-        log('game has finished');
-        server.broadcast({ type: 'game/finished' });
-        props.onFinished && props.onFinished();
-      }
+      finish();
     }
   });
   server.on('message', (username, message) => {
@@ -89,5 +93,9 @@ export const game = (
         }
       }
     }
+    if (!message.type.startsWith('game/') && phase === 'playing') {
+      props.onMessage && props.onMessage(username, message);
+    }
   });
+  return { finish };
 };

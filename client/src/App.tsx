@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Ancient } from './Ancient';
 import { KrmxProvider } from '@krmx/client';
-import { AppState, useAppDispatch } from './store';
+import { AppState, useAppDispatch } from './store/store';
 
 export function App() {
   const [counter, setCounter] = useState(0);
-  const serverUrl = `ws://localhost:8082/game?ancient&version=0.0.2&counter=${counter}`;
+  const serverUrl = `ws://localhost:8082/game?ancient&version=0.0.3&counter=${counter}`;
   const dispatch = useAppDispatch();
   return <div className='h-screen flex flex-col gap-y-4 pt-4'>
     <header className={'container mx-auto px-4'}>

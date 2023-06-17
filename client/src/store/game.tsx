@@ -1,12 +1,11 @@
-import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { krmxSlice } from '@krmx/client';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-const gameSlice = createSlice({
+export const gameSlice = createSlice({
   name: 'game',
   initialState: {
     phase: 'lobby' as ('lobby' | 'started' | 'paused' | 'finished'),
-    players: {} as { [username: string]: { isReady: boolean }},
+    players: {} as { [username: string]: { isReady: boolean } },
   },
   reducers: {
     reset: () => {
@@ -40,15 +39,3 @@ const gameSlice = createSlice({
     });
   },
 });
-export const store = configureStore({
-  reducer: {
-    krmx: krmxSlice.reducer,
-    game: gameSlice.reducer,
-  },
-});
-
-export type AppState = ReturnType<typeof store.getState>;
-export const useAppSelector: TypedUseSelectorHook<AppState> = useSelector;
-
-export type AppDispatch = typeof store.dispatch;
-export const useAppDispatch: () => AppDispatch = useDispatch;
