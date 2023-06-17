@@ -50,6 +50,7 @@ export const cards = (server: Server) => {
   let hands: { [player: string]: Card[] | undefined } = {};
   let cycle: string[] = [];
   let turn = 0;
+  let winner: string | undefined = undefined;
   const drawCard = (player: string): boolean => {
     if (!cycle.includes(player)) {
       // cannot draw a card for a player that is not in the turn cycle
@@ -123,7 +124,7 @@ export const cards = (server: Server) => {
       hands = {};
       pile = [deck.pop()!];
       server.broadcast({ type: 'cards/shuffled', payload: { deckSize: deck.length, pileCard: pile[0] } });
-      for (let i = 0; i < 7; i += 1) {
+      for (let i = 0; i < 1; i += 1) {
         for (const player of players) {
           drawCard(player);
         }
@@ -132,11 +133,26 @@ export const cards = (server: Server) => {
       // logging
       console.info(Object.entries(hands).map(([player, hand]) => `${player}: ${hand?.map(cardToString).join(', ')}`));
     },
-    onResume: () => {
-      // TODO: not yet implemented
-      //   1. have resume reset card state on all clients + broadcast whole state
-      //  OR
-      //   2. have resume get the reconnected clients and send whole states only to them
+    onRelinked: (player) => {
+      const handSizes: { [player: string]: number } = {};
+      for (const entry of Object.entries(hands)) {
+        const [player, hand] = entry;
+        handSizes[player] = hand === undefined ? 0 : hand.length;
+      }
+      const cardsSetMessage = {
+        type: 'cards/set',
+        payload: {
+          cycle,
+          turn: cycle[turn],
+          deckSize: deck.length,
+          handSizes,
+          pile: { size: pile.length, card: pile[pile.length - 1] },
+          hand: hands[player],
+          winner,
+        },
+      };
+      console.info(cardsSetMessage);
+      server.send(player, cardsSetMessage);
     },
     onMessage: (player, message) => {
       console.debug(`[info] [cards] ${player} sent ${message.type}`);
@@ -145,8 +161,8 @@ export const cards = (server: Server) => {
           const card: Card | undefined = (message as unknown as { payload?: { card: Card | undefined } }).payload?.card;
           if (card !== undefined && playCard(player, card)) {
             if (hands[player]?.length === 0) {
+              winner = player;
               server.broadcast({ type: 'cards/won', payload: { player } });
-              cardGame.finish();
             } else {
               nextTurn();
             }

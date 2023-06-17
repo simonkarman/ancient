@@ -31,6 +31,16 @@ export const cardsSlice = createSlice({
       state.hand = [];
       state.winner = undefined;
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    set: (state, action: PayloadAction<any>) => {
+      state.cycle = action.payload.cycle;
+      state.turn = action.payload.turn;
+      state.deckSize = action.payload.deckSize;
+      state.handSizes = action.payload.handSizes;
+      state.pile = action.payload.pile;
+      state.hand = action.payload.hand;
+      state.winner = action.payload.winner;
+    },
     cycle: (state, action: PayloadAction<{ cycle: string[] }>) => {
       state.cycle = action.payload.cycle;
       for (const player of action.payload.cycle) {

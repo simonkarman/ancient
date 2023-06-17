@@ -8,6 +8,7 @@ export const game = (
     minPlayers: number,
     onStart?: (players: string[]) => void,
     onPause?: () => void,
+    onRelinked?: (username: string) => void,
     onResume?: () => void,
     onFinished?: () => void,
     onMessage?: (username:string, message: Message) => void,
@@ -42,6 +43,7 @@ export const game = (
       players[username].isReady = true;
       server.broadcast({ type: 'game/ready-upped', payload: { username } });
       server.send(username, { type: 'game/paused' });
+      props.onRelinked && props.onRelinked(username);
       if (getAllPlayers().every(player => player.isReady)) {
         phase = 'playing';
         log('game has resumed');
