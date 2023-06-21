@@ -2,7 +2,7 @@ import http from 'http';
 import { DateTime } from 'luxon';
 import short from 'short-uuid';
 import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
-import { EventEmitter, IEventEmitter } from './event-emitter';
+import { EventEmitter, EventListener } from './event-emitter';
 import { ExpectedQueryParams, hasExpectedQueryParams } from './utils';
 
 interface UserLinkMessage { type: 'user/link', payload: { username: string } }
@@ -135,7 +135,7 @@ export interface User {
  */
 export type Message = { type: string };
 
-type Events = {
+export type Events = {
   /**
    * This event is emitted once the server has started listening and is ready to accept connections.
    *
@@ -197,7 +197,7 @@ type Events = {
 /**
  * Server is a websocket server that abstracts individual websocket connections into users.
  */
-export interface Server extends IEventEmitter<Events> {
+export interface Server extends EventListener<Events> {
   /**
    * Start listening at the specified port number.
    * This function is asynchronous, the server is listening once the server emits a 'listen' event.
