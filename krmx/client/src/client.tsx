@@ -3,14 +3,20 @@ import React, { createContext, FC, PropsWithChildren, useCallback, useContext, u
 import { Provider, useDispatch, useSelector } from 'react-redux';
 import WebSocket from 'isomorphic-ws';
 
+export type KrmxState = {
+  username: string;
+  rejectionReason?: string;
+  isLinked: boolean;
+  users: { [username: string]: { isLinked: boolean}};
+};
+const initialState: KrmxState = {
+  username: '',
+  isLinked: false,
+  users: {},
+};
 export const krmxSlice = createSlice({
   name: 'user',
-  initialState: {
-    username: '' as string,
-    rejectionReason: undefined as (string | undefined),
-    isLinked: false as boolean,
-    users: {} as { [username: string]: { isLinked: boolean}},
-  },
+  initialState,
   reducers: {
     reset: (_, action: PayloadAction<{ username: string }>) => {
       return {
@@ -49,7 +55,6 @@ export const krmxSlice = createSlice({
     },
   },
 });
-export type KrmxState = ReturnType<typeof krmxSlice.getInitialState>;
 
 type MessageConsumer = <TMessage extends { type: string }>(message: TMessage) => void;
 type KrmxContextProps = {
@@ -156,11 +161,16 @@ export const KrmxProvider: FC<PropsWithChildren<{
  *
  * Usage
  * ```ts
- * const { Krmx: KrmxComponentWithStore } = KrmxProviderWithStore();
- * const MyComponent = () => {
- *   return <Krmx serverUrl={...} onMessage={...}>
- *     ...
- *   </Krmx>
+ * const { Krmx } = KrmxProviderWithStore();
+ * function MyApp() {
+ *   return (
+ *     <Krmx
+ *       serverUrl={...}
+ *       onMessage={(message) => console.info(message)}
+ *     >
+ *       <MyComponent/>
+ *     </Krmx>
+ *   );
  * }
  * ```
  */
