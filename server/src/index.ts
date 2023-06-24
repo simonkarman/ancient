@@ -1,6 +1,6 @@
 import { createServer, LogSeverity } from '@krmx/server';
 import { cards } from './cards';
-import { game } from './game';
+import { createGame } from './game';
 import { commands, monitorUsers } from './monitor';
 
 export const server = createServer({
@@ -14,6 +14,11 @@ export const server = createServer({
 monitorUsers(server);
 commands(server, process.stdin);
 
-cards(server);
+const game = createGame(server, {
+  log: true,
+  minPlayers: 2,
+  maxPlayers: 4,
+});
+cards(game, server);
 
 server.listen(8082);

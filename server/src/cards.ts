@@ -1,5 +1,5 @@
 import { Server } from '@krmx/server';
-import { game } from './game';
+import { Game } from './game';
 
 // -- messages from server --
 // cards/shuffled [deckSize: number, pileCard: Card]
@@ -13,7 +13,7 @@ import { game } from './game';
 // cards/play [card: Card]
 // cards/draw []
 
-export const cards = (server: Server) => {
+export const cards = (game: Game, server: Server) => {
   const getSuites = () => ['hearts', 'spades', 'diamonds', 'clubs'] as const;
   const getRanks = () => ['A', 'K', 'Q', 'J', 10, 9, 8, 7, 6, 5, 4, 3, 2] as const;
   type Suite = ReturnType<typeof getSuites> extends readonly (infer T)[] ? T : never;
@@ -106,77 +106,72 @@ export const cards = (server: Server) => {
     turn = (turn + 1) % cycle.length;
     server.broadcast({ type: 'cards/turn', payload: { player: cycle[turn] } });
   };
-  const cardGame = game(server, {
-    log: true,
-    minPlayers: 2,
-    maxPlayers: 4,
-    onStart: (players) => {
-      console.info(`[info] [cards] starting game for '${players.length}' players`);
-      // players
-      cycle = shuffle(players);
-      server.broadcast({ type: 'cards/cycle', payload: { cycle } });
-      turn = -1;
-      nextTurn();
+  game.on('started', (players) => {
+    console.info(`[info] [cards] starting game for '${players.length}' players`);
+    // players
+    cycle = shuffle(players);
+    server.broadcast({ type: 'cards/cycle', payload: { cycle } });
+    turn = -1;
+    nextTurn();
 
-      // cards
-      deck = shuffle(players.length > 5 ? getDeck().concat(getDeck()) : getDeck());
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      hands = {};
-      pile = [deck.pop()!];
-      server.broadcast({ type: 'cards/shuffled', payload: { deckSize: deck.length, pileCard: pile[0] } });
-      for (let i = 0; i < 1; i += 1) {
-        for (const player of players) {
-          drawCard(player);
-        }
+    // cards
+    deck = shuffle(players.length > 5 ? getDeck().concat(getDeck()) : getDeck());
+    hands = {};
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    pile = [deck.pop()!];
+    server.broadcast({ type: 'cards/shuffled', payload: { deckSize: deck.length, pileCard: pile[0] } });
+    for (let i = 0; i < 1; i += 1) {
+      for (const player of players) {
+        drawCard(player);
       }
+    }
 
-      // logging
-      console.info(Object.entries(hands).map(([player, hand]) => `${player}: ${hand?.map(cardToString).join(', ')}`));
-    },
-    onRelinked: (player) => {
-      const handSizes: { [player: string]: number } = {};
-      for (const entry of Object.entries(hands)) {
-        const [player, hand] = entry;
-        handSizes[player] = hand === undefined ? 0 : hand.length;
-      }
-      const cardsSetMessage = {
-        type: 'cards/set',
-        payload: {
-          cycle,
-          turn: cycle[turn],
-          deckSize: deck.length,
-          handSizes,
-          pile: { size: pile.length, card: pile[pile.length - 1] },
-          hand: hands[player],
-          winner,
-        },
-      };
-      console.info(cardsSetMessage);
-      server.send(player, cardsSetMessage);
-    },
-    onMessage: (player, message) => {
-      console.debug(`[info] [cards] ${player} sent ${message.type}`);
-      if (cycle[turn] === player) {
-        if (message.type === 'cards/play') {
-          const card: Card | undefined = (message as unknown as { payload?: { card: Card | undefined } }).payload?.card;
-          if (card !== undefined && playCard(player, card)) {
-            if (hands[player]?.length === 0) {
-              winner = player;
-              server.broadcast({ type: 'cards/won', payload: { player } });
-            } else {
-              nextTurn();
-            }
+    // logging
+    console.info(Object.entries(hands).map(([player, hand]) => `${player}: ${hand?.map(cardToString).join(', ')}`));
+  });
+  game.on('relinked', (player) => {
+    const handSizes: { [player: string]: number } = {};
+    for (const entry of Object.entries(hands)) {
+      const [player, hand] = entry;
+      handSizes[player] = hand === undefined ? 0 : hand.length;
+    }
+    const cardsSetMessage = {
+      type: 'cards/set',
+      payload: {
+        cycle,
+        turn: cycle[turn],
+        deckSize: deck.length,
+        handSizes,
+        pile: { size: pile.length, card: pile[pile.length - 1] },
+        hand: hands[player],
+        winner,
+      },
+    };
+    console.info(cardsSetMessage);
+    server.send(player, cardsSetMessage);
+  });
+  game.on('message', (player, message) => {
+    console.debug(`[info] [cards] ${player} sent ${message.type}`);
+    if (cycle[turn] === player) {
+      if (message.type === 'cards/play') {
+        const card: Card | undefined = (message as unknown as { payload?: { card: Card | undefined } }).payload?.card;
+        if (card !== undefined && playCard(player, card)) {
+          if (hands[player]?.length === 0) {
+            winner = player;
+            server.broadcast({ type: 'cards/won', payload: { player } });
           } else {
-            console.info(`[info] [cards] ${player} cannot play card ${card && cardToString(card)}`);
-          }
-        } else if (message.type === 'cards/draw') {
-          if (drawCard(player)) {
             nextTurn();
-          } else {
-            console.info(`[info] [cards] ${player} cannot draw a card`);
           }
+        } else {
+          console.info(`[info] [cards] ${player} cannot play ${card && cardToString(card)}`);
+        }
+      } else if (message.type === 'cards/draw') {
+        if (drawCard(player)) {
+          nextTurn();
+        } else {
+          console.info(`[info] [cards] ${player} cannot draw a card`);
         }
       }
-    },
+    }
   });
 };

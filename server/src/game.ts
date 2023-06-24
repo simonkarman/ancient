@@ -1,19 +1,21 @@
 import { Message, Server } from '@krmx/server';
 
-export const game = (
+export type GameEvents = {
+  started: [players: string[]];
+  paused: [];
+  relinked: [player: string];
+  resumed: [];
+  finished: [];
+  message: [player: string, message: Message];
+};
+export const createGame = (
   server: Server,
   props: {
     log: boolean,
     maxPlayers: number,
     minPlayers: number,
-    onStart?: (players: string[]) => void,
-    onPause?: () => void,
-    onRelinked?: (username: string) => void,
-    onResume?: () => void,
-    onFinished?: () => void,
-    onMessage?: (username:string, message: Message) => void,
   },
-): { finish: () => void } => {
+) => server.pipe<GameEvents>(pipe => {
   const log = (...args: unknown[]) => {
     props.log && console.info('[info] [game]', ...args);
   };
@@ -21,7 +23,16 @@ export const game = (
   const players: { [username: string]: { isReady: boolean } } = {};
   const getAllPlayers = () => Object.entries(players).map(([username, player]) => ({ ...player, username }));
 
-  server.on('authenticate', (username, isNewUser, reject) => {
+  const finish = (): void => {
+    if (phase !== 'finished') {
+      phase = 'finished';
+      log('game has finished');
+      server.broadcast({ type: 'game/finished' });
+      pipe.emit('finished');
+    }
+  };
+
+  pipe.on('authenticate', (username, isNewUser, reject) => {
     if (phase === 'finished') {
       reject('game has finished');
     } else if (isNewUser) {
@@ -32,10 +43,10 @@ export const game = (
       }
     }
   });
-  server.on('join', (username: string) => {
+  pipe.on('join', (username: string) => {
     players[username] = { isReady: false };
   });
-  server.on('link', (username) => {
+  pipe.on('link', (username) => {
     getAllPlayers().filter(player => player.isReady).forEach(player => {
       server.send(username, { type: 'game/ready-upped', payload: { username: player.username } });
     });
@@ -43,16 +54,16 @@ export const game = (
       players[username].isReady = true;
       server.broadcast({ type: 'game/ready-upped', payload: { username } });
       server.send(username, { type: 'game/paused' });
-      props.onRelinked && props.onRelinked(username);
+      pipe.emit('relinked', username);
       if (getAllPlayers().every(player => player.isReady)) {
         phase = 'playing';
         log('game has resumed');
         server.broadcast({ type: 'game/resumed' });
-        props.onResume && props.onResume();
+        pipe.emit('resumed');
       }
     }
   });
-  server.on('unlink', (username: string) => {
+  pipe.on('unlink', (username: string) => {
     if (phase === 'lobby') {
       players[username].isReady = false;
     } else if (phase !== 'finished') {
@@ -61,19 +72,11 @@ export const game = (
         phase = 'paused';
         log('game has paused');
         server.broadcast({ type: 'game/paused' });
-        props.onPause && props.onPause();
+        pipe.emit('paused');
       }
     }
   });
-  const finish = (): void => {
-    if (phase !== 'finished') {
-      phase = 'finished';
-      log('game has finished');
-      server.broadcast({ type: 'game/finished' });
-      props.onFinished && props.onFinished();
-    }
-  };
-  server.on('leave', (username: string) => {
+  pipe.on('leave', (username: string) => {
     if (phase === 'lobby') {
       delete players[username];
     } else {
@@ -81,7 +84,7 @@ export const game = (
       finish();
     }
   });
-  server.on('message', (username, message) => {
+  pipe.on('message', (username, message) => {
     if (phase === 'lobby' && message.type === 'game/ready-up') {
       if (!players[username].isReady) {
         players[username].isReady = true;
@@ -91,13 +94,13 @@ export const game = (
           phase = 'playing';
           log('game has started');
           server.broadcast({ type: 'game/started' });
-          props.onStart && props.onStart(allPlayers.map(player => player.username));
+          pipe.emit('started', allPlayers.map(player => player.username));
         }
       }
     }
     if (!message.type.startsWith('game/') && phase === 'playing') {
-      props.onMessage && props.onMessage(username, message);
+      pipe.emit('message', username, message);
     }
   });
-  return { finish };
-};
+});
+export type Game = ReturnType<typeof createGame>;

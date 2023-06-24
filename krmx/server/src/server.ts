@@ -2,7 +2,7 @@ import http from 'http';
 import { DateTime } from 'luxon';
 import short from 'short-uuid';
 import ws, { AddressInfo, RawData, WebSocket, WebSocketServer } from 'ws';
-import { EventEmitter, EventListener } from './event-emitter';
+import { EventGenerator, EventEmitter } from './event-generator';
 import { ExpectedQueryParams, hasExpectedQueryParams } from './utils';
 
 interface UserLinkMessage { type: 'user/link', payload: { username: string } }
@@ -197,7 +197,7 @@ export type Events = {
 /**
  * Server is a websocket server that abstracts individual websocket connections into users.
  */
-export interface Server extends EventListener<Events> {
+export interface Server extends EventEmitter<Events> {
   /**
    * Start listening at the specified port number.
    * This function is asynchronous, the server is listening once the server emits a 'listen' event.
@@ -273,7 +273,7 @@ export function createServer(props?: Props): Server {
   return ServerImpl.create(props);
 }
 
-class ServerImpl extends EventEmitter<Events> implements Server {
+class ServerImpl extends EventGenerator<Events> implements Server {
   private readonly httpServer: http.Server;
   private readonly httpQueryParams: ExpectedQueryParams;
   private readonly logger: Logger;
