@@ -44,7 +44,7 @@ export const cardsSlice = createSlice({
     cycle: (state, action: PayloadAction<{ cycle: string[] }>) => {
       state.cycle = action.payload.cycle;
       for (const player of action.payload.cycle) {
-        state.handSizes[player] = 0;
+        state.handSizes[player] = state.handSizes[player] ?? 0;
       }
     },
     shuffled: (state, action: PayloadAction<{ deckSize: number, pileCard: Card }>) => {

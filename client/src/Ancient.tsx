@@ -9,7 +9,7 @@ export function Ancient() {
   const { isConnected, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
   const dispatch = useAppDispatch();
   useEffect(() => {
-    if (isLinked === false) {
+    if (!isLinked) {
       dispatch(gameSlice.actions.reset());
     }
   }, [dispatch, isConnected, isLinked]);
@@ -24,7 +24,7 @@ export function Ancient() {
     return <p className='text-red-900'>No connection to server</p>;
   }
   if (!isLinked) {
-    return <>
+    return <form>
       <input
         className='mt-1 px-3 py-2 border focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
         name='username'
@@ -34,20 +34,22 @@ export function Ancient() {
       />
       <button
         className='ml-2 transition-colors border p-2 hover:bg-green-400'
-        onClick={() => link(joinUsername)}>
+        onClick={(e) => {
+          link(joinUsername);
+          e.preventDefault();
+        }}>
         Join
       </button>
       <br/>
       {rejectionReason && <p className='text-red-900 p-2'>Rejected: {rejectionReason}</p>}
-    </>;
+    </form>;
   }
   const Lobby = () => {
     return <>
-      <h2 className='text-lg'>Lobby!</h2>
       <p>
-        Welcome <strong>{username}</strong>,
+        Welcome <strong>{username}</strong>,<br/>
+        Once you&apos;re ready, then please press the ready up button below. Then wait for all players to ready up.
       </p>
-      <p>Once you&apos;re ready, then please press the ready up button below. Then wait for all players to ready up.</p>
       <button
         className={'mt-2 mr-2 transition-colors border p-2 hover:bg-blue-400 '
           + 'disabled:hover:bg-gray-200 disabled:border-gray-100 disabled:text-gray-500'}
@@ -62,13 +64,20 @@ export function Ancient() {
       >
         Leave
       </button>
-      <p className='mt-2 text-gray-400'>
+      <p className='mt-2 text-gray-500'>
         {Object.entries(players).length < 2
-          ? <>You need at least 2 players to play this game.</>
+          ? <>You need at least <span className='font-bold'>two</span> players to play this game.</>
           : <>
-            The following players are NOT ready:
+            Waiting for
             {' '}
-            {Object.entries(players).filter(([, { isReady }]) => !isReady).map(([username]) => username).join(', ')}
+            {Object.entries(players)
+              .filter(([, { isReady }]) => !isReady)
+              .map(([username], index, { length }) => <span key={username}>
+                <span className='font-bold'>{username}</span>
+                {index !== length - 1 && (index !== length - 2 ? ', ' : ' and ')}
+              </span>)}
+            {' '}
+            to ready up.
           </>
         }
       </p>
@@ -101,34 +110,30 @@ export function Ancient() {
   const Game = () => {
     return <>
       <Cards />
-      <button
-        className='mt-2 transition-colors border p-2 hover:bg-red-400'
-        onClick={leave}
-      >
-        Abandon
-      </button>
     </>;
   };
   return <div className='w-full flex'>
     <div className={'grow'}>
-      <div className='my-2'>
+      <div className='my-2 mr-2'>
         {phase === 'lobby' && <Lobby />}
         {phase === 'started' && <Game />}
         {phase === 'paused' && <Paused />}
         {phase === 'finished' && <Finished />}
       </div>
     </div>
-    <div className={'border-l-2 px-4'}>
-      <h2 className='text-lg'>Users</h2>
-      <ul>
-        {Object.entries(users).map(([otherUsername, { isLinked }]) =>
-          <li key={otherUsername}>
-            {isLinked ? '🟢' : '🔴'} {
-              otherUsername === username ? <strong>{username} (you)</strong> : otherUsername
-            }
-          </li>,
-        )}
-      </ul>
-    </div>
+    {phase !== 'started' &&
+      <div className={'border-l-2 ml-2 px-4 whitespace-nowrap'}>
+        <h2 className='text-lg'>Players</h2>
+        <ul>
+          {Object.entries(users).map(([otherUsername, { isLinked }]) =>
+            <li key={otherUsername}>
+              {isLinked ? '🟢' : '🔴'} {
+                otherUsername === username ? <strong>{username} (you)</strong> : otherUsername
+              }
+            </li>,
+          )}
+        </ul>
+      </div>
+    }
   </div>;
 }

@@ -22,44 +22,57 @@ export const Cards = () => {
   const hand = useAppSelector(state => state.cards.hand);
   const pile = useAppSelector(state => state.cards.pile);
   const winner = useAppSelector(state => state.cards.winner);
+  const columns = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4', 'grid-cols-5', 'grid-cols-6'];
+  const mediumColumns = ['', 'md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3', 'md:grid-cols-4', 'md:grid-cols-5', 'md:grid-cols-6'];
   return <>
-    <h2 className='border-b text-lg'>Cards</h2>
-    <p>
-      Cycle: {cycle.join(' -> ')}<br/>
-      Turn: <strong>{turn}</strong><br/>
-      Deck size: {deckSize}<br />
-      Hand sizes: {Object.entries(handSizes)
-        .map(([username, numberOfCards]) => `${username}:${numberOfCards}`).join(', ')}<br />
-    </p>
-    <h2 className='border-b mt-4 text-lg'>Pile</h2>
-    <p>
-      Size: {pile.size}<br/>
-      <span className='text-4xl'>{cardToString(pile.card)}</span>
-    </p>
-    {winner && <>
-        The game was won by <strong>{winner}</strong>! As that player has no cards left in hand.
-    </>}
-    <h2 className='border-b mt-4 text-lg'>Hand</h2>
-    <p>
-      <ul className='mb-1 flex'>
-        {hand.map(card => <li key={cardToString(card)}>
-          <button
-            onClick={() => send({ type: 'cards/play', payload: { card } })} disabled={
-              turn !== self || (pile.card.suite !== card.suite && pile.card.rank !== card.rank)
-            }
-            className={'mt-2 mr-1 transition-colors border p-2 bg-green-100 hover:bg-green-400 '
-              + 'disabled:bg-transparent disabled:hover:bg-gray-200 disabled:border-gray-100 disabled:text-gray-500'}
-          >{cardToString(card)}</button>
-        </li>)}
-        <li>
-          <button
-            onClick={() => send({ type: 'cards/draw' })} disabled={turn !== self}
-            className={'mt-2 mr-2 transition-colors border p-2 bg-green-100 hover:bg-green-400 '
-              + 'disabled:bg-transparent disabled:hover:bg-gray-200 disabled:border-gray-100 disabled:text-gray-500'}
-          >Draw</button>
+    <h2 className='mb-2 text-lg'>Players</h2>
+    <ul className='flex items-center gap-2'>
+      {cycle.map((player, index) => <>
+        {player === turn && index !== 0 && <li className='text-sm' key='previous'>&gt;</li>}
+        <li key={player}
+          className={`flex flex-col transition-all border px-4 py-2 ${player === turn ? 'flex-grow border-gray-400' : ''}`}>
+          {player}{player === self ? ' (you)' : ''}<br />
+          {handSizes[player]} card{handSizes[player] === 1 ? '' : 's'}
         </li>
-      </ul>
-      {turn === self && <span className='animate-pulse'>It is your turn! Please play or draw a card.</span>}
-    </p>
+        {player === turn && index !== cycle.length - 1 && <li className='text-sm' key='next'>&gt;</li>}
+      </>)}
+    </ul>
+    <div className='mt-4 flex gap-4'>
+      <div>
+        <h2 className='mb-2 text-lg'>Table</h2>
+        <p className='p-4 border text-6xl md:text-8xl'>{cardToString(pile.card)}</p>
+        <p className='mt-2 text-gray-400'>
+          Pile: {pile.size} card{pile.size === 1 ? '' : 's'}<br/>
+          Deck: {deckSize} card{deckSize === 1 ? '' : 's'}<br/>
+        </p>
+      </div>
+      <div className='flex-grow'>
+        <h2 className='mb-2 text-lg'>Hand</h2>
+        <ul className={`mb-1 grid ${columns[Math.min(hand.length, 4)]} ${mediumColumns[Math.min(hand.length, 6)]} gap-4`}>
+          {hand.map(card => <li key={cardToString(card)}>
+            <button
+              onClick={() => send({ type: 'cards/play', payload: { card } })} disabled={
+                turn !== self || (pile.card.suite !== card.suite && pile.card.rank !== card.rank)
+              }
+              className={'w-full transition-colors border p-2 bg-green-100 hover:bg-green-400 '
+            + 'disabled:bg-transparent disabled:hover:bg-gray-200 disabled:border-gray-200 disabled:text-gray-500'}
+            >{cardToString(card)}</button>
+          </li>)}
+        </ul>
+        <button
+          onClick={() => send({ type: 'cards/draw' })} disabled={turn !== self}
+          className={'mt-2 w-full transition-colors border p-2 bg-green-100 hover:bg-green-400 '
+            + 'disabled:bg-transparent disabled:hover:bg-gray-200 disabled:border-gray-200 disabled:text-gray-500'}
+        >Draw</button>
+        {turn === self && <p className='mt-2 animate-pulse'>It is your turn! Please play or draw a card.</p>}
+        {winner ? <p className='my-2'>
+            &gt; The game was won by <span className='font-bold'>{winner}</span>! As that player has no cards left in hand.
+        </p> : <ul className='mt-2'>
+          <li><strong>7 or K</strong>: if you play a seven or a king, you have to take another turn</li>
+          <li><strong>8</strong>: if you play an eight, the next player skips a turn</li>
+          <li><strong>A</strong>: if you play an ace, the turn cycle reverses order</li>
+        </ul>}
+      </div>
+    </div>
   </>;
 };

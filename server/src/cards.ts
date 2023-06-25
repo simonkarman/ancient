@@ -13,7 +13,7 @@ import { Game } from './game';
 // cards/play [card: Card]
 // cards/draw []
 
-export const cards = (game: Game, server: Server) => {
+export const cards = (game: Game, server: Server, rules: { startingHandSize: number }) => {
   const getSuites = () => ['hearts', 'spades', 'diamonds', 'clubs'] as const;
   const getRanks = () => ['A', 'K', 'Q', 'J', 10, 9, 8, 7, 6, 5, 4, 3, 2] as const;
   type Suite = ReturnType<typeof getSuites> extends readonly (infer T)[] ? T : never;
@@ -120,7 +120,7 @@ export const cards = (game: Game, server: Server) => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     pile = [deck.pop()!];
     server.broadcast({ type: 'cards/shuffled', payload: { deckSize: deck.length, pileCard: pile[0] } });
-    for (let i = 0; i < 1; i += 1) {
+    for (let i = 0; i < rules.startingHandSize; i += 1) {
       for (const player of players) {
         drawCard(player);
       }
@@ -157,10 +157,21 @@ export const cards = (game: Game, server: Server) => {
         const card: Card | undefined = (message as unknown as { payload?: { card: Card | undefined } }).payload?.card;
         if (card !== undefined && playCard(player, card)) {
           if (hands[player]?.length === 0) {
+            turn = -1;
             winner = player;
             server.broadcast({ type: 'cards/won', payload: { player } });
           } else {
-            nextTurn();
+            if (card.rank === 'A') {
+              cycle = cycle.reverse();
+              turn = cycle.length - 1 - turn;
+              server.broadcast({ type: 'cards/cycle', payload: { cycle } });
+            }
+            if (card.rank !== 'K' && card.rank !== 7) {
+              nextTurn();
+            }
+            if (card.rank === 8) {
+              nextTurn();
+            }
           }
         } else {
           console.info(`[info] [cards] ${player} cannot play ${card && cardToString(card)}`);

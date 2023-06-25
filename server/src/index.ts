@@ -19,6 +19,8 @@ const game = createGame(server, {
   minPlayers: 2,
   maxPlayers: 4,
 });
-cards(game, server);
+cards(game, server, {
+  startingHandSize: 5,
+});
 
 server.listen(8082);

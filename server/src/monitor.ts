@@ -22,6 +22,10 @@ export const monitorUsers = (server: Server) => {
 
 export const commands = (server: Server, from: NodeJS.ReadStream) => {
   from.on('data', data => {
+    // Skip command if 'rs' is passed which will restart the node process
+    if (data.toString().trim() === 'rs') {
+      return;
+    }
     const words = data.toString().trim().replace('\r\n', '').split(' ');
     try {
       if (words[0] === 'kick' && words.length === 2) {
@@ -31,14 +35,14 @@ export const commands = (server: Server, from: NodeJS.ReadStream) => {
       } else if (words[0] === 'unlink' && words.length === 2) {
         server.unlink(words[1]);
       } else if (words[0] === 'status' && words.length === 1) {
-        console.info(server.getStatus());
+        console.info('>', server.getStatus());
       } else if (words[0] === 'users' && words.length === 1) {
-        console.info(server.getUsers());
+        console.info('>', server.getUsers());
       } else {
         throw new Error('unknown command');
       }
-    } catch (e) {
-      console.error(`command '${words.join(' ')}' failed:`, e);
+    } catch (e: unknown) {
+      console.error(`> command '${words.join(' ')}' failed:`, (e as { message: string }).message);
     }
   });
 };
