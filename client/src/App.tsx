@@ -7,12 +7,12 @@ export function App() {
   const [counter, setCounter] = useState(0);
   const serverUrl = `ws://localhost:8082/game?ancient&version=0.0.3&counter=${counter}`;
   const dispatch = useAppDispatch();
-  return <div className='h-screen flex flex-col gap-y-4 pt-4'>
+  return <div className='flex h-screen flex-col gap-y-4 pt-4'>
     <header className={'container mx-auto px-4'}>
       <div className='flex justify-between'>
-        <h1 className={'font-bold text-2xl'}>Ancient</h1>
+        <h1 className={'text-2xl font-bold'}>Ancient</h1>
         <button
-          className='transition-colors border border-gray-100 text-gray-300 px-2 py-1 hover:bg-red-400 hover:text-black'
+          className='border border-gray-100 px-2 py-1 text-gray-300 transition-colors hover:bg-red-400 hover:text-black'
           onClick={() => setCounter(counter + 1)}
         >
         Reconnect

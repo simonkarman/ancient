@@ -1,4 +1,5 @@
 import { useKrmx } from '@krmx/client';
+import { twMerge } from 'tailwind-merge';
 import { Card } from './store/cards';
 import { useAppSelector } from './store/store';
 
@@ -29,8 +30,13 @@ export const Cards = () => {
     <ul className='flex items-center gap-2'>
       {cycle.map((player, index) => <>
         {player === turn && index !== 0 && <li className='text-sm' key='previous'>&gt;</li>}
-        <li key={player}
-          className={`flex flex-col transition-all border px-4 py-2 ${player === turn ? 'flex-grow border-gray-400' : ''}`}>
+        <li
+          key={player}
+          className={twMerge(
+            'flex flex-col border px-4 py-2 transition-all duration-500',
+            player === turn && 'grow border-gray-400',
+          )}
+        >
           {player}{player === self ? ' (you)' : ''}<br />
           {handSizes[player]} card{handSizes[player] === 1 ? '' : 's'}
         </li>
@@ -40,13 +46,13 @@ export const Cards = () => {
     <div className='mt-4 flex gap-4'>
       <div>
         <h2 className='mb-2 text-lg'>Table</h2>
-        <p className='p-4 border text-6xl md:text-8xl'>{cardToString(pile.card)}</p>
+        <p className='border p-4 text-6xl md:text-8xl'>{cardToString(pile.card)}</p>
         <p className='mt-2 text-gray-400'>
           Pile: {pile.size} card{pile.size === 1 ? '' : 's'}<br/>
           Deck: {deckSize} card{deckSize === 1 ? '' : 's'}<br/>
         </p>
       </div>
-      <div className='flex-grow'>
+      <div className='grow'>
         <h2 className='mb-2 text-lg'>Hand</h2>
         <ul className={`mb-1 grid ${columns[Math.min(hand.length, 4)]} ${mediumColumns[Math.min(hand.length, 6)]} gap-4`}>
           {hand.map(card => <li key={cardToString(card)}>

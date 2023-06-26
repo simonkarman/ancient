@@ -26,14 +26,14 @@ export function Ancient() {
   if (!isLinked) {
     return <form>
       <input
-        className='mt-1 px-3 py-2 border focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+        className='mt-1 border px-3 py-2 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500'
         name='username'
         placeholder='username'
         value={joinUsername}
         onInput={(e) => setJoinUsername(e.currentTarget.value)}
       />
       <button
-        className='ml-2 transition-colors border p-2 hover:bg-green-400'
+        className='ml-2 border p-2 transition-colors hover:bg-green-400'
         onClick={(e) => {
           link(joinUsername);
           e.preventDefault();
@@ -41,7 +41,7 @@ export function Ancient() {
         Join
       </button>
       <br/>
-      {rejectionReason && <p className='text-red-900 p-2'>Rejected: {rejectionReason}</p>}
+      {rejectionReason && <p className='p-2 text-red-900'>Rejected: {rejectionReason}</p>}
     </form>;
   }
   const Lobby = () => {
@@ -59,7 +59,7 @@ export function Ancient() {
         Ready Up!
       </button>
       <button
-        className='transition-colors border p-2 hover:bg-red-400'
+        className='border p-2 transition-colors hover:bg-red-400'
         onClick={leave}
       >
         Leave
@@ -88,7 +88,7 @@ export function Ancient() {
       <h2 className='text-lg'>Game is paused...</h2>
       <p>Please wait for all players to reconnect.</p>
       <button
-        className='transition-colors border p-2 hover:bg-red-400'
+        className='border p-2 transition-colors hover:bg-red-400'
         onClick={leave}
       >
         Abandon
@@ -100,7 +100,7 @@ export function Ancient() {
       <h2 className='text-lg'>Finished</h2>
       <p>The game has concluded, you can now leave the server.</p>
       <button
-        className='mt-2 transition-colors border p-2 hover:bg-red-400'
+        className='mt-2 border p-2 transition-colors hover:bg-red-400'
         onClick={leave}
       >
         Leave
@@ -112,7 +112,7 @@ export function Ancient() {
       <Cards />
     </>;
   };
-  return <div className='w-full flex'>
+  return <div className='flex w-full'>
     <div className={'grow'}>
       <div className='my-2 mr-2'>
         {phase === 'lobby' && <Lobby />}
@@ -122,7 +122,7 @@ export function Ancient() {
       </div>
     </div>
     {phase !== 'started' &&
-      <div className={'border-l-2 ml-2 px-4 whitespace-nowrap'}>
+      <div className={'ml-2 whitespace-nowrap border-l-2 px-4'}>
         <h2 className='text-lg'>Players</h2>
         <ul>
           {Object.entries(users).map(([otherUsername, { isLinked }]) =>
