@@ -5,7 +5,7 @@ import { cardsSlice } from './store/cards';
 import { gameSlice } from './store/game';
 import { AppState, useAppDispatch, useAppSelector } from './store/store';
 
-export function Ancient() {
+export function Game() {
   const { isConnected, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
   const dispatch = useAppDispatch();
   useEffect(() => {
@@ -14,8 +14,9 @@ export function Ancient() {
     }
   }, [dispatch, isConnected, isLinked]);
   const [joinUsername, setJoinUsername] = useState('');
-  const phase = useAppSelector((state: AppState) => state?.game.phase);
-  const players = useAppSelector((state: AppState) => state?.game.players);
+  const phase = useAppSelector((state: AppState) => state.game.phase);
+  const players = useAppSelector((state: AppState) => state.game.players);
+  const config = useAppSelector((state: AppState) => state.game.config);
   useEffect(() => {
     document.title = username.length === 0 ? 'Ancient' : `Ancient - ${username}`;
     dispatch(cardsSlice.actions.reset({ self: username }));
@@ -44,19 +45,31 @@ export function Ancient() {
       {rejectionReason && <p className='p-2 text-red-900'>Rejected: {rejectionReason}</p>}
     </form>;
   }
+  const selfReady = players[username].isReady;
+  const minPlayersReached = Object.entries(players).length >= config.minPlayers;
   const Lobby = () => {
     return <>
-      <p>
-        Welcome <strong>{username}</strong>,<br/>
-        Once you&apos;re ready, then please press the ready up button below. Then wait for all players to ready up.
+      <p className='mb-4'>
+        Welcome <strong>{username}</strong>,
+      </p>
+      <p className='mb-4'>
+        You&apos;re going to play <b>{config.name}</b>.
       </p>
       <button
-        className={'mt-2 mr-2 transition-colors border p-2 hover:bg-blue-400 '
+        className={'mt-2 mr-2 transition-colors border p-2 hover:bg-green-400 '
           + 'disabled:hover:bg-gray-200 disabled:border-gray-100 disabled:text-gray-500'}
         onClick={() => send({ type: 'game/ready-up' })}
-        disabled={players[username].isReady}
+        disabled={!minPlayersReached || selfReady}
       >
         Ready Up!
+      </button>
+      <button
+        className={'mt-2 mr-2 transition-colors border p-2 hover:bg-yellow-400 '
+          + 'disabled:hover:bg-gray-200 disabled:border-gray-100 disabled:text-gray-500'}
+        onClick={() => send({ type: 'game/unready-up' })}
+        disabled={!selfReady}
+      >
+        Unready Up
       </button>
       <button
         className='border p-2 transition-colors hover:bg-red-400'
@@ -64,11 +77,12 @@ export function Ancient() {
       >
         Leave
       </button>
-      <p className='mt-2 text-gray-500'>
-        {Object.entries(players).length < 2
-          ? <>You need at least <span className='font-bold'>two</span> players to play this game.</>
+      <p className='mt-2 text-gray-400'>
+        {!minPlayersReached
+          ? <>Ask your friends to join! You need at least <span className='font-bold'>{config.minPlayers}</span> players to play this game.</>
           : <>
-            Waiting for
+            {!selfReady && <>Please press the ready up button, once you&apos;re ready to start the game.{' '}</>}
+            The game will start once
             {' '}
             {Object.entries(players)
               .filter(([, { isReady }]) => !isReady)
@@ -77,7 +91,9 @@ export function Ancient() {
                 {index !== length - 1 && (index !== length - 2 ? ', ' : ' and ')}
               </span>)}
             {' '}
-            to ready up.
+            {Object.entries(players).filter(([, { isReady }]) => !isReady).length === 1 ? 'readies' : 'ready'}
+            {' '}
+            up.
           </>
         }
       </p>
@@ -86,9 +102,9 @@ export function Ancient() {
   const Paused = () => {
     return <>
       <h2 className='text-lg'>Game is paused...</h2>
-      <p>Please wait for all players to reconnect.</p>
+      <p className='mb-4'>The game will continue once all players have reconnected.</p>
       <button
-        className='border p-2 transition-colors hover:bg-red-400'
+        className='border border-red-400 p-2 text-red-400 transition-colors hover:bg-red-400 hover:text-white'
         onClick={leave}
       >
         Abandon
@@ -98,9 +114,9 @@ export function Ancient() {
   const Finished = () => {
     return <>
       <h2 className='text-lg'>Finished</h2>
-      <p>The game has concluded, you can now leave the server.</p>
+      <p className='mb-4'>The game has concluded, you can now leave the server.</p>
       <button
-        className='mt-2 border p-2 transition-colors hover:bg-red-400'
+        className='border border-blue-400 p-2 text-blue-400 transition-colors hover:bg-blue-400 hover:text-white'
         onClick={leave}
       >
         Leave
@@ -109,7 +125,8 @@ export function Ancient() {
   };
   const Game = () => {
     return <>
-      <Cards />
+      {config.name === 'cards' && <Cards />}
+      {config.name === 'ancient' && <p>Game ancient is not yet implemented.</p>}
     </>;
   };
   return <div className='flex w-full'>

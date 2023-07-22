@@ -12,6 +12,7 @@ export const createGame = (
   server: Server,
   props: {
     log: boolean,
+    name: string,
     maxPlayers: number,
     minPlayers: number,
   },
@@ -31,6 +32,14 @@ export const createGame = (
       pipe.emit('finished');
     }
   };
+  const unreadyAllPlayers = () => {
+    Object.entries(players).forEach(([username, player]) => {
+      if (player.isReady) {
+        player.isReady = false;
+        server.broadcast({ type: 'game/unready-upped', payload: { username } });
+      }
+    });
+  };
 
   pipe.on('authenticate', (username, isNewUser, reject) => {
     if (phase === 'finished') {
@@ -45,8 +54,14 @@ export const createGame = (
   });
   pipe.on('join', (username: string) => {
     players[username] = { isReady: false };
+    unreadyAllPlayers();
   });
   pipe.on('link', (username) => {
+    server.send(username, { type: 'game/config', payload: {
+      name: props.name,
+      minPlayers: props.minPlayers,
+      maxPlayers: props.maxPlayers,
+    } });
     getAllPlayers().filter(player => player.isReady).forEach(player => {
       server.send(username, { type: 'game/ready-upped', payload: { username: player.username } });
     });
@@ -79,14 +94,15 @@ export const createGame = (
   pipe.on('leave', (username: string) => {
     if (phase === 'lobby') {
       delete players[username];
+      unreadyAllPlayers();
     } else {
       players[username].isReady = false;
       finish();
     }
   });
   pipe.on('message', (username, message) => {
-    if (phase === 'lobby' && message.type === 'game/ready-up') {
-      if (!players[username].isReady) {
+    if (phase === 'lobby') {
+      if (message.type === 'game/ready-up' && !players[username].isReady) {
         players[username].isReady = true;
         server.broadcast({ type: 'game/ready-upped', payload: { username } });
         const allPlayers = getAllPlayers();
@@ -96,6 +112,10 @@ export const createGame = (
           server.broadcast({ type: 'game/started' });
           pipe.emit('started', allPlayers.map(player => player.username));
         }
+      }
+      if (message.type === 'game/unready-up' && players[username].isReady) {
+        players[username].isReady = false;
+        server.broadcast({ type: 'game/unready-upped', payload: { username } });
       }
     }
     if (!message.type.startsWith('game/') && phase === 'playing') {

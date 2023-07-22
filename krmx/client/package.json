@@ -1,7 +1,7 @@
 {
   "name": "@krmx/client",
   "version": "0.1.8",
-  "main": "dist/src/index.js",
+  "main": "src/index.tsx",
   "author": "Simon Karman",
   "license": "ISC",
   "homepage": "github.com/simonkarman/ancient",
