@@ -1,7 +1,8 @@
 import { krmxSlice } from '@krmx/client';
 import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
-import { cardsSlice } from './cards';
+import { ancientSlice } from '../ancient/ancient-store';
+import { cardsSlice } from '../cards/cards-store';
 import { gameSlice } from './game';
 
 export const store = configureStore({
@@ -9,6 +10,7 @@ export const store = configureStore({
     krmx: krmxSlice.reducer,
     game: gameSlice.reducer,
     cards: cardsSlice.reducer,
+    ancient: ancientSlice.reducer,
   },
 });
 

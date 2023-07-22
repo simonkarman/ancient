@@ -1,7 +1,7 @@
 import { useKrmx } from '@krmx/client';
 import { twMerge } from 'tailwind-merge';
-import { Card } from './store/cards';
-import { useAppSelector } from './store/store';
+import { Card } from './cards-store';
+import { useAppSelector } from '../store/store';
 
 const cardToString = (card: Card): string => {
   const suite = {

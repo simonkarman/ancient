@@ -1,5 +1,6 @@
 import { createServer, EventEmitter, LogSeverity, Server } from '@krmx/server';
-import { cards } from './cards';
+import { ancient } from './ancient/ancient';
+import { cards } from './cards/cards';
 import { createGame, GameEvents } from './game';
 import { commands, monitorUsers } from './monitor';
 
@@ -21,9 +22,7 @@ const gameConfigs: { [gameName: string]: GameConfig | undefined } = {
   'ancient': {
     minPlayers: 1,
     maxPlayers: 3,
-    setup: (game, server) => {
-      // TODO
-    },
+    setup: ancient,
   },
 };
 

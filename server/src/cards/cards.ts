@@ -1,5 +1,5 @@
 import { Server } from '@krmx/server';
-import { Game } from './game';
+import { Game } from '../game';
 
 // -- messages from server --
 // cards/shuffled [deckSize: number, pileCard: Card]
@@ -107,7 +107,7 @@ export const cards = (game: Game, server: Server, rules: { startingHandSize: num
     server.broadcast({ type: 'cards/turn', payload: { player: cycle[turn] } });
   };
   game.on('started', (players) => {
-    console.info(`[info] [cards] starting game for '${players.length}' players`);
+    console.info(`[info] [cards] starting game for ${players.length} players`);
     // players
     cycle = shuffle(players);
     server.broadcast({ type: 'cards/cycle', payload: { cycle } });

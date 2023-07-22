@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useKrmx } from '@krmx/client';
-import { Cards } from './Cards';
-import { cardsSlice } from './store/cards';
+import { Ancient } from './ancient/main';
+import { ancientSlice } from './ancient/ancient-store';
+import { Cards } from './cards/main';
+import { cardsSlice } from './cards/cards-store';
 import { gameSlice } from './store/game';
 import { AppState, useAppDispatch, useAppSelector } from './store/store';
 
@@ -18,8 +20,9 @@ export function Game() {
   const players = useAppSelector((state: AppState) => state.game.players);
   const config = useAppSelector((state: AppState) => state.game.config);
   useEffect(() => {
-    document.title = username.length === 0 ? 'Ancient' : `Ancient - ${username}`;
+    document.title = (username.length === 0) ? 'Krmx Game' : `Game - ${username}`;
     dispatch(cardsSlice.actions.reset({ self: username }));
+    dispatch(ancientSlice.actions.reset({ self: username }));
   }, [username]);
   if (!isConnected) {
     return <p className='text-red-900'>No connection to server</p>;
@@ -78,16 +81,15 @@ export function Game() {
         Leave
       </button>
       <p className='mt-2 text-gray-400'>
-        {!minPlayersReached
-          ? <>Ask your friends to join! You need at least <span className='font-bold'>{config.minPlayers}</span> players to play this game.</>
-          : <>
+        {minPlayersReached
+          ? <>
             {!selfReady && <>Please press the ready up button, once you&apos;re ready to start the game.{' '}</>}
             The game will start once
             {' '}
             {Object.entries(players)
               .filter(([, { isReady }]) => !isReady)
               .map(([username], index, { length }) => <span key={username}>
-                <span className='font-bold'>{username}</span>
+                <span className="font-bold">{username}</span>
                 {index !== length - 1 && (index !== length - 2 ? ', ' : ' and ')}
               </span>)}
             {' '}
@@ -95,6 +97,7 @@ export function Game() {
             {' '}
             up.
           </>
+          : <>Ask your friends to join! You need at least <span className="font-bold">{config.minPlayers}</span> players to play this game.</>
         }
       </p>
     </>;
@@ -126,7 +129,7 @@ export function Game() {
   const Game = () => {
     return <>
       {config.name === 'cards' && <Cards />}
-      {config.name === 'ancient' && <p>Game ancient is not yet implemented.</p>}
+      {config.name === 'ancient' && <Ancient />}
     </>;
   };
   return <div className='flex w-full'>
