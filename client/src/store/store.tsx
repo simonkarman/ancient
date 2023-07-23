@@ -3,6 +3,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { ancientSlice } from '../ancient/ancient-store';
 import { cardsSlice } from '../cards/cards-store';
+import { hexlinesSlice } from '../hexlines/hexlines-store';
 import { gameSlice } from './game';
 
 export const store = configureStore({
@@ -11,6 +12,7 @@ export const store = configureStore({
     game: gameSlice.reducer,
     cards: cardsSlice.reducer,
     ancient: ancientSlice.reducer,
+    hexlines: hexlinesSlice.reducer,
   },
 });
 

@@ -4,6 +4,8 @@ import { Ancient } from './ancient/main';
 import { ancientSlice } from './ancient/ancient-store';
 import { Cards } from './cards/main';
 import { cardsSlice } from './cards/cards-store';
+import { hexlinesSlice } from './hexlines/hexlines-store';
+import { Hexlines } from './hexlines/main';
 import { gameSlice } from './store/game';
 import { AppState, useAppDispatch, useAppSelector } from './store/store';
 
@@ -23,6 +25,7 @@ export function Game() {
     document.title = (username.length === 0) ? 'Krmx Game' : `Game - ${username}`;
     dispatch(cardsSlice.actions.reset({ self: username }));
     dispatch(ancientSlice.actions.reset({ self: username }));
+    dispatch(hexlinesSlice.actions.reset({ self: username }));
   }, [username]);
   if (!isConnected) {
     return <p className='text-red-900'>No connection to server</p>;
@@ -130,6 +133,7 @@ export function Game() {
     return <>
       {config.name === 'cards' && <Cards />}
       {config.name === 'ancient' && <Ancient />}
+      {config.name === 'hexlines' && <Hexlines />}
     </>;
   };
   return <div className='flex w-full'>

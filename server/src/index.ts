@@ -2,6 +2,7 @@ import { createServer, EventEmitter, LogSeverity, Server } from '@krmx/server';
 import { ancient } from './ancient/ancient';
 import { cards } from './cards/cards';
 import { createGame, GameEvents } from './game';
+import { hexlines } from './hexlines/hexlines';
 import { commands, monitorUsers } from './monitor';
 
 type GameConfig = {
@@ -23,6 +24,11 @@ const gameConfigs: { [gameName: string]: GameConfig | undefined } = {
     minPlayers: 1,
     maxPlayers: 3,
     setup: ancient,
+  },
+  'hexlines': {
+    minPlayers: 2,
+    maxPlayers: 2,
+    setup: hexlines,
   },
 };
 
