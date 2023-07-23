@@ -56,11 +56,11 @@ export class CubeCoordinate {
     return CubeCoordinate.approximatelyEqual(this, other, epsilon);
   }
 
-  public static mutliply(a: CubeCoordinate, s: number) {
+  public static multiply(a: CubeCoordinate, s: number) {
     return new CubeCoordinate(a.x * s, a.y * s, a.z * s);
   }
-  public mutliply(s: number) {
-    return CubeCoordinate.mutliply(this, s);
+  public multiply(s: number) {
+    return CubeCoordinate.multiply(this, s);
   }
 
   public rounded() {

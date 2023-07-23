@@ -54,11 +54,11 @@ export class AxialCoordinate {
     return AxialCoordinate.approximatelyEqual(this, other, epsilon);
   }
 
-  public static mutliply(a: AxialCoordinate, s: number) {
+  public static multiply(a: AxialCoordinate, s: number) {
     return new AxialCoordinate(a.q * s, a.r * s);
   }
-  public mutliply(s: number) {
-    return AxialCoordinate.mutliply(this, s);
+  public multiply(s: number) {
+    return AxialCoordinate.multiply(this, s);
   }
 
   public rounded() {
@@ -108,7 +108,7 @@ export class AxialCoordinate {
     return AxialCoordinate.distance(this, other);
   }
 
-  public static circle(center: AxialCoordinate, radius: number): AxialCoordinate[] {
+  public static circle(center: AxialCoordinate, radius: number, exteriorOnly = false): AxialCoordinate[] {
     const coords: AxialCoordinate[] = [];
     center = center.rounded();
     radius = Math.round(radius);
@@ -116,6 +116,9 @@ export class AxialCoordinate {
       for (let r = center.r - radius + 1; r < center.r + radius; r++) {
         const coord = new AxialCoordinate(q, r);
         if (coord.distance(center) >= radius) {
+          continue;
+        }
+        if (exteriorOnly && coord.distance(center) < radius - 1) {
           continue;
         }
         coords.push(coord);
@@ -139,9 +142,9 @@ export class AxialCoordinate {
     for (let secondaryI = -halfThickness + 1; secondaryI < halfThickness; secondaryI++) {
       for (let primaryI = -halfLength + 1; primaryI < halfLength; primaryI++) {
         const coord = center
-          .add(primary.mutliply(primaryI))
-          .add(secondary.mutliply(Math.floor((secondaryI + 1) / 2)))
-          .add(tertiary.mutliply(Math.floor(secondaryI / 2)));
+          .add(primary.multiply(primaryI))
+          .add(secondary.multiply(Math.floor((secondaryI + 1) / 2)))
+          .add(tertiary.multiply(Math.floor(secondaryI / 2)));
         if (extra && (primaryI == -halfLength + 1) && (secondaryI % 2 != 0)) {
           coords.push(coord.substract(primary));
         }

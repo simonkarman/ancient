@@ -20,6 +20,8 @@ interface Tile {
   id: string;
   location: string;
   lines: Line[];
+  isEdge: boolean;
+  debug: string;
 }
 
 export const hexlinesSlice = createSlice({
@@ -28,12 +30,14 @@ export const hexlinesSlice = createSlice({
     self: '',
     owners: {} as { [player: string]: Owner },
     tiles: {} as { [tileId: string]: Tile },
+    turn: '',
   },
   reducers: {
     reset: (state, action: PayloadAction<{ self: string }>) => {
       state.self = action.payload.self;
       state.owners = {};
       state.tiles = {};
+      state.turn = '';
     },
     owner: (state, action: PayloadAction<Owner>) => {
       state.owners[action.payload.player] = action.payload;
@@ -49,6 +53,9 @@ export const hexlinesSlice = createSlice({
     },
     'line-owner-updated': (state, action: PayloadAction<{ owner: string, tileId: string, lineIndex: number }>) => {
       state.tiles[action.payload.tileId].lines[action.payload.lineIndex].owner = action.payload.owner;
+    },
+    turn: (state, action: PayloadAction<{ owner: string }>) => {
+      state.turn = action.payload.owner;
     },
   },
 });

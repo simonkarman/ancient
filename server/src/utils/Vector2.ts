@@ -36,11 +36,11 @@ export class Vector2 {
     return Vector2.approximatelyEqual(this, other, epsilon);
   }
 
-  public static mutliply(a: Vector2, s: number) {
+  public static multiply(a: Vector2, s: number) {
     return new Vector2(a.x * s, a.y * s);
   }
-  public mutliply(s: number) {
-    return Vector2.mutliply(this, s);
+  public multiply(s: number) {
+    return Vector2.multiply(this, s);
   }
 
   public rounded() {
@@ -74,5 +74,8 @@ export class Vector2 {
   public static fromDegrees(degrees: number) {
     const radians = Math.PI / 180 * degrees;
     return new Vector2(Math.cos(radians), Math.sin(radians));
+  }
+  public angle() {
+    return Math.atan2(this.y, this.x) * (180.0 / Math.PI);
   }
 }

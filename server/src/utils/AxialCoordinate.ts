@@ -54,11 +54,11 @@ export class AxialCoordinate {
     return AxialCoordinate.approximatelyEqual(this, other, epsilon);
   }
 
-  public static mutliply(a: AxialCoordinate, s: number) {
+  public static multiply(a: AxialCoordinate, s: number) {
     return new AxialCoordinate(a.q * s, a.r * s);
   }
   public multiply(s: number) {
-    return AxialCoordinate.mutliply(this, s);
+    return AxialCoordinate.multiply(this, s);
   }
 
   public rounded() {
@@ -108,7 +108,7 @@ export class AxialCoordinate {
     return AxialCoordinate.distance(this, other);
   }
 
-  public static circle(center: AxialCoordinate, radius: number): AxialCoordinate[] {
+  public static circle(center: AxialCoordinate, radius: number, exteriorOnly = false): AxialCoordinate[] {
     const coords: AxialCoordinate[] = [];
     center = center.rounded();
     radius = Math.round(radius);
@@ -116,6 +116,9 @@ export class AxialCoordinate {
       for (let r = center.r - radius + 1; r < center.r + radius; r++) {
         const coord = new AxialCoordinate(q, r);
         if (coord.distance(center) >= radius) {
+          continue;
+        }
+        if (exteriorOnly && coord.distance(center) < radius - 1) {
           continue;
         }
         coords.push(coord);
