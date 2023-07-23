@@ -17,6 +17,7 @@ const getAnchorPosition = (anchorId: number): Vector2 => {
 const Tile = (props: { size: number, location: AxialCoordinate, lines: Line[], isEdge: boolean, debug: string }) => {
   const owners = useAppSelector(state => state.hexlines.owners);
   const pixel = props.location.toPixel(props.size);
+  const isStartTile = AxialCoordinate.approximatelyEqual(props.location, AxialCoordinate.Zero);
   return (
     <g transform={`translate(${new Vector2(pixel.x, -pixel.y).toSvgString()})`}>
       <polygon
@@ -27,21 +28,24 @@ const Tile = (props: { size: number, location: AxialCoordinate, lines: Line[], i
             .map(corner => `${corner.x},${corner.y}`).join(' ')
         }
         fill={'#FCF3CF'}
-        fillOpacity={props.isEdge ? 0.1 : 0.4}
-        strokeDasharray={'4 4'}
+        fillOpacity={props.isEdge ? 0.05 : (isStartTile ? 0.6 : 0.2)}
         stroke={'#F7DC6F'}
-        strokeWidth={0.5}
+        strokeOpacity={0.8}
+        strokeWidth={props.size / 30}
       />
       {props.lines.map(({ fromAnchorId, toAnchorId, owner }) => {
-        const from = getAnchorPosition(fromAnchorId).multiply(props.size);
-        const to = getAnchorPosition(toAnchorId).multiply(props.size);
+        const hasOwner = owner !== undefined;
+        const from = getAnchorPosition(fromAnchorId).multiply(props.size * (hasOwner ? 0.98 : 0.95));
+        const to = getAnchorPosition(toAnchorId).multiply(props.size * (hasOwner ? 0.98 : 0.95));
+        const toCenterVector = from.add(to).multiply(props.isEdge ? 0.15 : 0.07);
         return <path
           className='transition-all duration-700'
           key={`${fromAnchorId}-${toAnchorId}`}
-          d={`M ${from.x} ${from.y} Q 0 0 ${to.x} ${to.y}`}
-          stroke={owner === undefined ? '#F7DC6F' : owners[owner]?.color || 'black'}
-          strokeWidth={owner === undefined ? props.size / 30 : props.size / 10}
-          strokeOpacity={owner === undefined ? 0.5 : 1}
+          d={`M ${from.x} ${from.y} Q ${toCenterVector.x} ${toCenterVector.y} ${to.x} ${to.y}`}
+          stroke={hasOwner ? owners[owner]?.color || 'black' : '#F7DC6F'}
+          strokeWidth={hasOwner ? props.size / 9 : props.size / 18}
+          strokeOpacity={hasOwner ? 1 : 0.4}
+          strokeLinecap={'round'}
           fill="transparent"
         />;
       })}
@@ -78,7 +82,7 @@ export const Hexlines = () => {
           <stop offset="79%" stopColor="rgba(255,255,255,1)" />
         </radialGradient>
       </defs>
-      <circle r={svgSize.y * (owners.length <= 2 ? 0.62 : 0.6)} fill={'url(#edge-mask-gradient)'} />
+      <circle r={svgSize.y * (owners.length <= 2 ? 0.62 : 0.58)} fill={'url(#edge-mask-gradient)'} />
       {owners.map(([player, owner]) => {
         if (owner.currentLocation === undefined) {
           return <></>;

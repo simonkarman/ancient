@@ -7,10 +7,10 @@ import { approximatelyEqual } from '../utils/Math';
 const colors = [
   '#9FE2BF',
   '#FF7F50',
-  '#DE3163',
   '#6495ED',
-  '#40E0D0',
+  '#DE3163',
   '#CCCCFF',
+  '#40E0D0',
 ];
 
 interface Line {
@@ -93,35 +93,70 @@ export const hexlines = (game: Game, server: Server) => {
     });
   };
 
-  const spawnTile = (location: AxialCoordinate, owner?: string): Tile => {
+  const spawnStartTile = () => {
+    // For the first tile we need 12 lines, these lines connect to their own anchorId.
+    // Since these are the starting positions of players, and the first 6 are used for this,
+    //  no two anchors in the first 6 should be on the same side.
     const lines: Line[] = [];
-    if (owner === undefined) {
-      // For the first tile we need 12 lines, these lines connect to their own anchorId.
-      // Since these are the starting positions of players, and the first 6 are used for this,
-      //  no two anchors in the first 6 should be on the same side.
-      const cornerId = [0, 1, 2, 3, 4, 5];
-      shuffleInPlace(cornerId);
-      cornerId.forEach(cornerId => {
-        // The anchors are added per side at once. One on the front of the list, the other at the end.
-        const unshiftLower = Math.random() < 0.5;
-        lines.unshift({
-          fromAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
-          toAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
-        });
-        lines.push({
-          fromAnchorId: (cornerId * 2) + (unshiftLower ? 1 : 0),
-          toAnchorId: (cornerId * 2) + (unshiftLower ? 1 : 0),
-        });
+    const cornerId = [0, 1, 2, 3, 4, 5];
+    shuffleInPlace(cornerId);
+    cornerId.forEach(cornerId => {
+      // The anchors are added per side at once. One on the front of the list, the other at the end.
+      const unshiftLower = Math.random() < 0.5;
+      lines.unshift({
+        fromAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
+        toAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
       });
-    } else {
-      const anchorIdPool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-      shuffleInPlace(anchorIdPool);
-      while (anchorIdPool.length > 0) {
-        lines.push({
-          fromAnchorId: anchorIdPool.pop() || 0,
-          toAnchorId: anchorIdPool.pop() || 0,
-        });
-      }
+      lines.push({
+        fromAnchorId: (cornerId * 2) + (unshiftLower ? 1 : 0),
+        toAnchorId: (cornerId * 2) + (unshiftLower ? 1 : 0),
+      });
+    });
+    const tile: Tile = {
+      id: `t-${tiles.length}`,
+      location: AxialCoordinate.Zero,
+      lines,
+      isEdge: false,
+      debug: '',
+    };
+    tiles.push(tile);
+    server.broadcast({
+      type: 'hexlines/tile',
+      payload: {
+        ...tile,
+        location: tile.location.toString(),
+      },
+    });
+    owners.forEach((owner, lineIndex) => {
+      tile.lines[lineIndex].owner = owner.player;
+      owner.currentLocation = {
+        tileId: tile.id,
+        anchorId: tile.lines[lineIndex].toAnchorId,
+      };
+      server.broadcast({ type: 'hexlines/line-owner-updated', payload: {
+        owner: owner.player,
+        tileId: tile.id,
+        lineIndex,
+      } });
+      server.broadcast({
+        type: 'hexlines/owner-location-updated',
+        payload: {
+          player: owner.player,
+          currentLocation: owner.currentLocation,
+        },
+      });
+    });
+  };
+
+  const spawnTile = (location: AxialCoordinate): Tile => {
+    const lines: Line[] = [];
+    const anchorIdPool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    shuffleInPlace(anchorIdPool);
+    while (anchorIdPool.length > 0) {
+      lines.push({
+        fromAnchorId: anchorIdPool.pop() || 0,
+        toAnchorId: anchorIdPool.pop() || 0,
+      });
     }
     const tile: Tile = {
       id: `t-${tiles.length}`,
@@ -138,30 +173,7 @@ export const hexlines = (game: Game, server: Server) => {
         location: tile.location.toString(),
       },
     });
-    if (owner === undefined) {
-      owners.forEach((owner, lineIndex) => {
-        tile.lines[lineIndex].owner = owner.player;
-        owner.currentLocation = {
-          tileId: tile.id,
-          anchorId: tile.lines[lineIndex].toAnchorId,
-        };
-        server.broadcast({ type: 'hexlines/line-owner-updated', payload: {
-          owner: owner.player,
-          tileId: tile.id,
-          lineIndex,
-        } });
-        server.broadcast({
-          type: 'hexlines/owner-location-updated',
-          payload: {
-            player: owner.player,
-            currentLocation: owner.currentLocation,
-          },
-        });
-      });
-    }
-    if (owner !== undefined) {
-      // TODO: allow the owner to turn the tile to their liking
-    }
+    // TODO: allow the current turn player to rotate the tile to their liking
     owners.forEach((_, ownerIndex) => {
       // Start with the owner that has the current turn, then loop through remaining owners in order
       const owner = owners[(turn + ownerIndex) % owners.length];
@@ -233,8 +245,15 @@ export const hexlines = (game: Game, server: Server) => {
     shuffleInPlace(players);
     players.forEach(addOwner);
     AxialCoordinate.circle(AxialCoordinate.Zero, players.length <= 2 ? 4 : 5, true).forEach(spawnEdgeTile);
-    spawnTile(AxialCoordinate.Zero);
+    spawnStartTile();
+    let next: AxialCoordinate | undefined = undefined;
     const intervalId = setInterval(() => {
+      if (next) {
+        spawnTile(next);
+        server.broadcast({ type: 'hexlines/turn', payload: { owner: '' } });
+        next = undefined;
+        return;
+      }
       let current = owners[turn];
       turn = (turn + 1) % owners.length;
       let deadPlayerCount = 0;
@@ -248,8 +267,7 @@ export const hexlines = (game: Game, server: Server) => {
         }
       }
       server.broadcast({ type: 'hexlines/turn', payload: { owner: current.player } });
-      const next = getNextTargetLocation(current.currentLocation);
-      spawnTile(next, current.player);
+      next = getNextTargetLocation(current.currentLocation);
     }, 1500);
   });
 
