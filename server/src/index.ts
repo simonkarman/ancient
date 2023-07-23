@@ -26,8 +26,8 @@ const gameConfigs: { [gameName: string]: GameConfig | undefined } = {
     setup: ancient,
   },
   'hexlines': {
-    minPlayers: 2,
-    maxPlayers: 2,
+    minPlayers: 1, // TODO: change back to 2
+    maxPlayers: 6,
     setup: hexlines,
   },
 };
