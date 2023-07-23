@@ -39,7 +39,7 @@ export class Vector2 {
   public static mutliply(a: Vector2, s: number) {
     return new Vector2(a.x * s, a.y * s);
   }
-  public mutliply(s: number) {
+  public multiply(s: number) {
     return Vector2.mutliply(this, s);
   }
 

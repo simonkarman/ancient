@@ -57,7 +57,7 @@ export class AxialCoordinate {
   public static mutliply(a: AxialCoordinate, s: number) {
     return new AxialCoordinate(a.q * s, a.r * s);
   }
-  public mutliply(s: number) {
+  public multiply(s: number) {
     return AxialCoordinate.mutliply(this, s);
   }
 
@@ -139,9 +139,9 @@ export class AxialCoordinate {
     for (let secondaryI = -halfThickness + 1; secondaryI < halfThickness; secondaryI++) {
       for (let primaryI = -halfLength + 1; primaryI < halfLength; primaryI++) {
         const coord = center
-          .add(primary.mutliply(primaryI))
-          .add(secondary.mutliply(Math.floor((secondaryI + 1) / 2)))
-          .add(tertiary.mutliply(Math.floor(secondaryI / 2)));
+          .add(primary.multiply(primaryI))
+          .add(secondary.multiply(Math.floor((secondaryI + 1) / 2)))
+          .add(tertiary.multiply(Math.floor(secondaryI / 2)));
         if (extra && (primaryI == -halfLength + 1) && (secondaryI % 2 != 0)) {
           coords.push(coord.substract(primary));
         }

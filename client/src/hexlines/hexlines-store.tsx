@@ -4,6 +4,10 @@ interface Owner {
   player: string;
   score: number;
   color: string;
+  currentLocation?: {
+    tileId: string;
+    anchorId: number;
+  }
 }
 
 export interface Line {
@@ -36,6 +40,15 @@ export const hexlinesSlice = createSlice({
     },
     tile: (state, action: PayloadAction<Tile>) => {
       state.tiles[action.payload.id] = action.payload;
+    },
+    'owner-location-updated': (state, action: PayloadAction<Pick<Owner, 'player' | 'currentLocation'>>) => {
+      state.owners[action.payload.player].currentLocation = action.payload.currentLocation;
+    },
+    score: (state, action: PayloadAction<{ owner: string }>) => {
+      state.owners[action.payload.owner].score += 1;
+    },
+    'line-owner-updated': (state, action: PayloadAction<{ owner: string, tileId: string, lineIndex: number }>) => {
+      state.tiles[action.payload.tileId].lines[action.payload.lineIndex].owner = action.payload.owner;
     },
   },
 });

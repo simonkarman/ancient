@@ -6,7 +6,7 @@ import { Vector2 } from '../utils/Vector2';
 
 const Hexagon = (props: { size: number }) => {
   const corners = useMemo(
-    () => AxialCoordinate.Directions.map((_, index) => Vector2.fromDegrees(index * 60).mutliply(props.size)),
+    () => AxialCoordinate.Directions.map((_, index) => Vector2.fromDegrees(index * 60).multiply(props.size)),
     [props.size],
   );
   return (
