@@ -7,6 +7,7 @@ export type GameEvents = {
   resumed: [];
   finished: [];
   message: [player: string, message: Message];
+  tick: [totalElapsedMs: number];
 };
 export const createGame = (
   server: Server,
@@ -15,6 +16,7 @@ export const createGame = (
     name: string,
     maxPlayers: number,
     minPlayers: number,
+    tickMs: number,
   },
 ) => server.pipe<GameEvents>(pipe => {
   const log = (...args: unknown[]) => {
@@ -24,14 +26,19 @@ export const createGame = (
   const players: { [username: string]: { isReady: boolean } } = {};
   const getAllPlayers = () => Object.entries(players).map(([username, player]) => ({ ...player, username }));
 
+  let totalElapsedMs = 0;
+  let tickId: NodeJS.Timer | undefined = undefined;
+
   const finish = (): void => {
     if (phase !== 'finished') {
+      clearInterval(tickId);
       phase = 'finished';
       log('game has finished');
       server.broadcast({ type: 'game/finished' });
       pipe.emit('finished');
     }
   };
+
   const unreadyAllPlayers = () => {
     Object.entries(players).forEach(([username, player]) => {
       if (player.isReady) {
@@ -111,6 +118,12 @@ export const createGame = (
           log('game has started');
           server.broadcast({ type: 'game/started' });
           pipe.emit('started', allPlayers.map(player => player.username));
+          tickId = setInterval(() => {
+            if (phase === 'playing') {
+              totalElapsedMs += props.tickMs;
+              pipe.emit('tick', totalElapsedMs);
+            }
+          }, props.tickMs);
         }
       }
       if (message.type === 'game/unready-up' && players[username].isReady) {

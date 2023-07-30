@@ -1,19 +1,21 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+type Location = {
+  tileId: string;
+  anchorId: number;
+};
+
 interface Owner {
-  player: string;
+  name: string;
   score: number;
   color: string;
-  currentLocation?: {
-    tileId: string;
-    anchorId: number;
-  }
+  location?: Location
 }
 
 export interface Line {
   fromAnchorId: number;
   toAnchorId: number;
-  owner?: string;
+  ownerName?: string;
 }
 
 interface Tile {
@@ -30,7 +32,7 @@ export const hexlinesSlice = createSlice({
     self: '',
     owners: {} as { [player: string]: Owner },
     tiles: {} as { [tileId: string]: Tile },
-    turn: '',
+    turn: '' as (string | undefined),
   },
   reducers: {
     reset: (state, action: PayloadAction<{ self: string }>) => {
@@ -39,23 +41,26 @@ export const hexlinesSlice = createSlice({
       state.tiles = {};
       state.turn = '';
     },
-    owner: (state, action: PayloadAction<Owner>) => {
-      state.owners[action.payload.player] = action.payload;
+    started: (state, action: PayloadAction<Owner[]>) => {
+      for (let i = 0; i < action.payload.length; i++) {
+        const owner = action.payload[i];
+        state.owners[owner.name] = owner;
+      }
     },
-    tile: (state, action: PayloadAction<Tile>) => {
+    tileSpawned: (state, action: PayloadAction<Tile>) => {
       state.tiles[action.payload.id] = action.payload;
     },
-    'owner-location-updated': (state, action: PayloadAction<Pick<Owner, 'player' | 'currentLocation'>>) => {
-      state.owners[action.payload.player].currentLocation = action.payload.currentLocation;
+    tileLineOwnerUpdated: (state, action: PayloadAction<{ tileId: string, lineIndex: number, ownerName: string }>) => {
+      state.tiles[action.payload.tileId].lines[action.payload.lineIndex].ownerName = action.payload.ownerName;
     },
-    score: (state, action: PayloadAction<{ owner: string }>) => {
-      state.owners[action.payload.owner].score += 1;
+    ownerLocationUpdated: (state, action: PayloadAction<{ ownerName: string, location: Location }>) => {
+      state.owners[action.payload.ownerName].location = action.payload.location;
     },
-    'line-owner-updated': (state, action: PayloadAction<{ owner: string, tileId: string, lineIndex: number }>) => {
-      state.tiles[action.payload.tileId].lines[action.payload.lineIndex].owner = action.payload.owner;
+    ownerScoreUpdated: (state, action: PayloadAction<{ ownerName: string, score: number }>) => {
+      state.owners[action.payload.ownerName].score = action.payload.score;
     },
-    turn: (state, action: PayloadAction<{ owner: string }>) => {
-      state.turn = action.payload.owner;
+    turn: (state, action: PayloadAction<{ ownerName: string | undefined }>) => {
+      state.turn = action.payload.ownerName;
     },
   },
 });

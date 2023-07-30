@@ -57,6 +57,7 @@ const game = createGame(server, {
   name: gameName,
   minPlayers: gameConfig.minPlayers,
   maxPlayers: gameConfig.maxPlayers,
+  tickMs: 100,
 });
 gameConfig.setup(game, server);
 

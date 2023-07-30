@@ -5,18 +5,45 @@ import { Vector2 } from '../utils/Vector2';
 import { Line } from './hexlines-store';
 
 const getCornerPosition = (cornerId: number) => Vector2.fromDegrees((cornerId - 2) * 60);
-const getAnchorPosition = (anchorId: number): Vector2 => {
+const getAnchorCorners = (anchorId: number): [Vector2, Vector2] => {
   const cornerIndexA = Math.floor(anchorId / 2);
   const cornerIndexB = cornerIndexA + 1;
-  const cornerLocationA = getCornerPosition(cornerIndexA);
-  const cornerLocationB = getCornerPosition(cornerIndexB % 6);
-  const diff = cornerLocationB.substract(cornerLocationA).multiply(0.33);
-  return cornerLocationA.add(diff.multiply(anchorId % 2 === 0 ? 1 : 2));
+  return [getCornerPosition(cornerIndexA), getCornerPosition(cornerIndexB % 6)];
 };
 
-const Tile = (props: { size: number, location: AxialCoordinate, lines: Line[], isEdge: boolean, debug: string }) => {
+const getAnchorPosition = (anchorId: number): Vector2 => {
+  const corners = getAnchorCorners(anchorId);
+  const diff = corners[1].substract(corners[0]).multiply(0.33);
+  return corners[0].add(diff.multiply(anchorId % 2 === 0 ? 1 : 2));
+};
+const getAnchorNormal = (anchorId: number): Vector2 => {
+  const corners = getAnchorCorners(anchorId);
+  const diff = corners[1].substract(corners[0]);
+  return new Vector2(diff.y, -diff.x).normalized();
+};
+
+const TileLine = (props: {
+  tileSize: number, fromAnchorId: number, toAnchorId: number, strokeWidth: number, color: string, opacity: number
+}) => {
+  const from = getAnchorPosition(props.fromAnchorId).substract(getAnchorNormal(props.fromAnchorId).multiply(0.0)).multiply(props.tileSize);
+  const to = getAnchorPosition(props.toAnchorId).substract(getAnchorNormal(props.toAnchorId).multiply(0.0)).multiply(props.tileSize);
+  const distance = 0.25 + getAnchorPosition(props.fromAnchorId).distance(getAnchorPosition(props.toAnchorId)) * 0.15;
+  const centerFrom = from.substract(getAnchorNormal(props.fromAnchorId).multiply(props.tileSize * distance));
+  const centerTo = to.substract(getAnchorNormal(props.toAnchorId).multiply(props.tileSize * distance));
+  return <>
+    <path
+      d={`M ${from.x} ${from.y} C ${centerFrom.x} ${centerFrom.y} ${centerTo.x} ${centerTo.y} ${to.x} ${to.y}`}
+      stroke={props.color}
+      strokeWidth={props.tileSize * props.strokeWidth}
+      strokeOpacity={props.opacity}
+      fill='transparent'
+    />
+  </>;
+};
+
+const Tile = (props: { gridSize: number, tileSize: number, location: AxialCoordinate, lines: Line[], isEdge: boolean, debug: string }) => {
   const owners = useAppSelector(state => state.hexlines.owners);
-  const pixel = props.location.toPixel(props.size);
+  const pixel = props.location.toPixel(props.gridSize);
   const isStartTile = AxialCoordinate.approximatelyEqual(props.location, AxialCoordinate.Zero);
   return (
     <g transform={`translate(${new Vector2(pixel.x, -pixel.y).toSvgString()})`}>
@@ -24,32 +51,40 @@ const Tile = (props: { size: number, location: AxialCoordinate, lines: Line[], i
         points={
           [0, 1, 2, 3, 4, 5]
             .map(getCornerPosition)
-            .map(corner => corner.multiply(props.size * (props.isEdge ? 0.95 : 0.95)))
+            .map(corner => corner.multiply(props.tileSize))
             .map(corner => `${corner.x},${corner.y}`).join(' ')
         }
         fill={'#FCF3CF'}
-        fillOpacity={props.isEdge ? 0.05 : (isStartTile ? 0.6 : 0.2)}
-        stroke={'#F7DC6F'}
-        strokeOpacity={0.8}
-        strokeWidth={props.size / 30}
+        fillOpacity={props.isEdge ? 0.4 : (isStartTile ? 1 : 0.8)}
+        stroke={'#FCF3CF'}
+        strokeOpacity={1}
+        strokeWidth={props.tileSize * 0.025}
       />
-      {props.lines.map(({ fromAnchorId, toAnchorId, owner }) => {
-        const hasOwner = owner !== undefined;
-        const from = getAnchorPosition(fromAnchorId).multiply(props.size * (hasOwner ? 0.98 : 0.95));
-        const to = getAnchorPosition(toAnchorId).multiply(props.size * (hasOwner ? 0.98 : 0.95));
-        const toCenterVector = from.add(to).multiply(props.isEdge ? 0.15 : 0.07);
-        return <path
-          className='transition-all duration-700'
-          key={`${fromAnchorId}-${toAnchorId}`}
-          d={`M ${from.x} ${from.y} Q ${toCenterVector.x} ${toCenterVector.y} ${to.x} ${to.y}`}
-          stroke={hasOwner ? owners[owner]?.color || 'black' : '#F7DC6F'}
-          strokeWidth={hasOwner ? props.size / 9 : props.size / 18}
-          strokeOpacity={hasOwner ? 1 : 0.4}
-          strokeLinecap={'round'}
-          fill="transparent"
-        />;
-      })}
-      <text>{props.debug}</text>
+      {[...props.lines]
+        // ensure without owner is drawn first
+        .sort((a, b) => (a.ownerName ? 1 : 0) - (b.ownerName ? 1 : 0))
+        .map(line => <g key={`${line.fromAnchorId}-${line.toAnchorId}`}>
+          <TileLine
+            tileSize={props.tileSize}
+            fromAnchorId={line.fromAnchorId}
+            toAnchorId={line.toAnchorId}
+            color={'#F7DC6F'}
+            opacity={props.isEdge ? 0.3 : 0.5}
+            strokeWidth={0.21}
+          />
+          <TileLine
+            tileSize={props.tileSize}
+            fromAnchorId={line.fromAnchorId}
+            toAnchorId={line.toAnchorId}
+            color={line.ownerName === undefined
+              ? 'white'
+              : owners[line.ownerName]?.color || 'black'
+            }
+            opacity={1}
+            strokeWidth={0.13}
+          />
+        </g>)
+      }
     </g>
   );
 };
@@ -59,8 +94,9 @@ export const Hexlines = () => {
   const owners = Object.entries(useAppSelector(state => state.hexlines.owners));
   const turn = useAppSelector(state => state.hexlines.turn);
   const numberOfHexesY = owners.length <= 2 ? 7 : 9;
-  const hexSize = 40;
-  const svgSize = { x: hexSize * (numberOfHexesY - 2) * 2, y: hexSize * (numberOfHexesY - 2) * 2 };
+  const gridSize = 40;
+  const tileSize = 38.5;
+  const svgSize = { x: gridSize * (numberOfHexesY - 2) * 2, y: gridSize * (numberOfHexesY - 2) * 2 };
   return <>
     <svg
       className='mb-1 max-h-[75vh] w-full'
@@ -69,13 +105,31 @@ export const Hexlines = () => {
     >
       {Object.entries(tiles).map(([tileId, tile]) => <Tile
         key={tileId}
-        size={hexSize}
+        gridSize={gridSize}
+        tileSize={tileSize}
         location={AxialCoordinate.fromString(tile.location)}
         lines={tile.lines}
         isEdge={tile.isEdge}
         debug={tile.debug}
       />)}
-      <circle r={hexSize * 0.3} fill={'#F7DC6F'} />
+      <circle r={gridSize * 0.5} fillOpacity={0.7} fill={'#F7DC6F'} />
+      <circle r={gridSize * 0.4} fill={'white'} fillOpacity={0.9} />
+      {owners.map(([player, owner]) => {
+        if (owner.location === undefined) {
+          return <></>;
+        }
+        const location = AxialCoordinate.fromString(tiles[owner.location.tileId].location);
+        const pixelHex = location.toPixel(gridSize);
+        const pixel = new Vector2(pixelHex.x, -pixelHex.y).add(getAnchorPosition(owner.location.anchorId).multiply(gridSize * 0.9));
+        return <circle
+          key={player}
+          cx={pixel.x}
+          cy={pixel.y}
+          r={gridSize / 7}
+          fill={owner.color}
+          stroke='black'
+        />;
+      })}
       <defs>
         <radialGradient id='edge-mask-gradient'>
           <stop offset='76%' stopColor="rgba(255,255,255,0)" />
@@ -83,30 +137,30 @@ export const Hexlines = () => {
         </radialGradient>
       </defs>
       <circle r={svgSize.y * (owners.length <= 2 ? 0.62 : 0.58)} fill={'url(#edge-mask-gradient)'} />
-      {owners.map(([player, owner]) => {
-        if (owner.currentLocation === undefined) {
-          return <></>;
-        }
-        const location = AxialCoordinate.fromString(tiles[owner.currentLocation.tileId].location);
-        const pixelHex = location.toPixel(hexSize);
-        const pixel = new Vector2(pixelHex.x, -pixelHex.y).add(getAnchorPosition(owner.currentLocation.anchorId).multiply(hexSize * 0.9));
-        return <circle
-          key={player}
-          cx={pixel.x}
-          cy={pixel.y}
-          r={hexSize / 7}
-          fill={owner.color}
-          stroke='black'
-        />;
-      })}
     </svg>
-    <ul className='flex justify-between gap-4'>
+    <ul className='flex justify-around gap-4'>
       {owners.map(([player, owner]) => <li
         key={player}
-        className={`border p-4 text-2xl font-bold ${owner.currentLocation === undefined ? 'line-through' : ''}`}
-        style={owner.player === turn ? { backgroundColor: owner.color, color: 'white' } : { borderColor: owner.color, color: owner.color }}
+        className='flex border-4 text-4xl font-bold'
+        style={{
+          borderColor: owner.name === turn ? 'white' : owner.color,
+          backgroundColor: owner.name === turn ? owner.color : 'transparent',
+          color: owner.name === turn ? 'white' : owner.color,
+          letterSpacing: '3px',
+        }}
       >
-        {owner.player} {owner.score}
+        <p
+          className={`border-r-4 px-4 py-3 text-center ${owner.location === undefined ? 'line-through' : ''}`}
+          style={{
+            borderColor: owner.name === turn ? 'white' : owner.color,
+            textDecorationThickness: '0.4rem',
+          }}
+        >
+          {owner.name}
+        </p>
+        <p className='px-6 py-3'>
+          {owner.score}
+        </p>
       </li>)}
     </ul>
   </>;

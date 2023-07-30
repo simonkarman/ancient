@@ -37,7 +37,7 @@ export function Game() {
         name='username'
         placeholder='username'
         value={joinUsername}
-        onInput={(e) => setJoinUsername(e.currentTarget.value)}
+        onInput={(e) => setJoinUsername(e.currentTarget.value.toLowerCase())}
       />
       <button
         className='ml-2 border p-2 transition-colors hover:bg-green-400'

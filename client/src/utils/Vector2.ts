@@ -78,4 +78,12 @@ export class Vector2 {
   public angle() {
     return Math.atan2(this.y, this.x) * (180.0 / Math.PI);
   }
+
+  public normalized(): Vector2 {
+    const length = this.length;
+    return new Vector2(this.x / length, this.y / length);
+  }
+  public static dot(a: Vector2, b: Vector2): number {
+    return a.x * b.x + a.y * b.y;
+  }
 }

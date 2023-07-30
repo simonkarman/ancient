@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { Server } from '@krmx/server';
+import { Server, EventGenerator } from '@krmx/server';
 import { Game } from '../game';
 import { AxialCoordinate } from '../utils/AxialCoordinate';
 import { approximatelyEqual } from '../utils/Math';
+import { Random } from '../utils/Random';
 
 const colors = [
   '#9FE2BF',
@@ -16,7 +17,7 @@ const colors = [
 interface Line {
   fromAnchorId: number;
   toAnchorId: number;
-  owner?: string;
+  ownerName?: string;
 }
 
 interface Tile {
@@ -27,82 +28,72 @@ interface Tile {
   debug: string;
 }
 
-interface Owner {
-  player: string;
-  score: number;
-  color: string;
-  currentLocation?: {
-    tileId: string;
-    anchorId: number;
-  }
+interface Location {
+  tileId: string;
+  anchorId: number;
 }
 
-const shuffleInPlace = (array: unknown[]): void => {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = array[i];
-    array[i] = array[j];
-    array[j] = temp;
+interface Owner {
+  name: string;
+  score: number;
+  color: string;
+  location?: Location
+}
+
+type HexlinesGameEvents = {
+  started: [owners: Owner[]];
+  tileSpawned: [tile: Tile];
+  tileLineOwnerUpdated: [tile: Tile, lineIndex: number];
+  ownerLocationUpdated: [owner: Owner];
+  ownerScoreUpdated: [owner: Owner];
+}
+
+class HexlinesGame extends EventGenerator<HexlinesGameEvents> {
+  private owners: ReadonlyArray<Owner> = [];
+  private tiles: Tile[] = [];
+  private readonly random: Random;
+
+  public getOwners(): ReadonlyArray<Readonly<Owner>> { return this.owners; }
+  public getTiles(): ReadonlyArray<Readonly<Tile>> { return this.tiles; }
+
+  constructor(seed: string) {
+    super();
+    this.random = new Random(seed);
   }
-};
 
-export const hexlines = (game: Game, server: Server) => {
-  const owners: Owner[] = [];
-  const tiles: Tile[] = [];
-  let turn = 0;
+  public start(players: string[]) {
+    // Setup owners
+    this.random.shuffleArrayInPlace(players);
+    const owners: Owner[] = [];
+    for (let playerIndex = 0; playerIndex < players.length; playerIndex++) {
+      owners.push({
+        name: players[playerIndex],
+        score: 1,
+        color: colors[playerIndex % colors.length],
+      });
+    }
+    this.emit('started', owners);
+    this.owners = owners;
 
-  const getNextTargetLocation = (currentLocation: Required<Owner>['currentLocation']): AxialCoordinate => {
-    const fromTile = tiles.find(tile => tile.id === currentLocation.tileId)!;
-    return fromTile.location.add(AxialCoordinate.Directions[Math.floor(currentLocation.anchorId / 2)]);
-  };
+    // Spawn start and edge tiles
+    this.spawnStartTile();
+    const edgeTileCoordinates = AxialCoordinate.circle(AxialCoordinate.Zero, this.owners.length <= 2 ? 4 : 5, true);
+    for (let i = 0; i < edgeTileCoordinates.length; i++) {
+      const edgeTileCoordinate = edgeTileCoordinates[i];
+      this.spawnEdgeTile(edgeTileCoordinate);
+    }
+  }
 
-  const addOwner = (player: string) => {
-    const owner: Owner = {
-      player,
-      score: 0,
-      color: colors[owners.length % colors.length],
-    };
-    owners.push(owner);
-    server.broadcast({
-      type: 'hexlines/owner',
-      payload: owner,
-    });
-  };
-
-  const spawnEdgeTile = (location: AxialCoordinate) => {
-    // Only add lines on the one or two sides that face the center
-    const angle = location.toPixel(1).angle();
-    const fractionalSide = (((270 - angle) % 360) / 60) % 6;
-    const sides = approximatelyEqual(fractionalSide, Math.round(fractionalSide))
-      ? [Math.round(fractionalSide) % 6]
-      : [Math.floor(fractionalSide) % 6, Math.ceil(fractionalSide) % 6];
-    const tile: Tile = {
-      id: `t-${tiles.length}`,
-      location,
-      lines: sides.map(side => ({ fromAnchorId: side * 2, toAnchorId: side * 2 + 1 })),
-      isEdge: true,
-      debug: '',
-    };
-    tiles.push(tile);
-    server.broadcast({
-      type: 'hexlines/tile',
-      payload: {
-        ...tile,
-        location: tile.location.toString(),
-      },
-    });
-  };
-
-  const spawnStartTile = () => {
+  private spawnStartTile() {
     // For the first tile we need 12 lines, these lines connect to their own anchorId.
     // Since these are the starting positions of players, and the first 6 are used for this,
     //  no two anchors in the first 6 should be on the same side.
     const lines: Line[] = [];
     const cornerId = [0, 1, 2, 3, 4, 5];
-    shuffleInPlace(cornerId);
+    this.random.shuffleArrayInPlace(cornerId);
     cornerId.forEach(cornerId => {
       // The anchors are added per side at once. One on the front of the list, the other at the end.
-      const unshiftLower = Math.random() < 0.5;
+      const unshiftLower = this.random.bool();
       lines.unshift({
         fromAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
         toAnchorId: (cornerId * 2) + (unshiftLower ? 0 : 1),
@@ -113,45 +104,50 @@ export const hexlines = (game: Game, server: Server) => {
       });
     });
     const tile: Tile = {
-      id: `t-${tiles.length}`,
+      id: `t-${this.tiles.length}`,
       location: AxialCoordinate.Zero,
       lines,
       isEdge: false,
       debug: '',
     };
-    tiles.push(tile);
-    server.broadcast({
-      type: 'hexlines/tile',
-      payload: {
-        ...tile,
-        location: tile.location.toString(),
-      },
-    });
-    owners.forEach((owner, lineIndex) => {
-      tile.lines[lineIndex].owner = owner.player;
-      owner.currentLocation = {
+    this.tiles.push(tile);
+    this.emit('tileSpawned', tile);
+    for (let lineIndex = 0; lineIndex < this.owners.length; lineIndex++) {
+      const owner = this.owners[lineIndex];
+
+      tile.lines[lineIndex].ownerName = owner.name;
+      this.emit('tileLineOwnerUpdated', tile, lineIndex);
+
+      owner.location = {
         tileId: tile.id,
         anchorId: tile.lines[lineIndex].toAnchorId,
       };
-      server.broadcast({ type: 'hexlines/line-owner-updated', payload: {
-        owner: owner.player,
-        tileId: tile.id,
-        lineIndex,
-      } });
-      server.broadcast({
-        type: 'hexlines/owner-location-updated',
-        payload: {
-          player: owner.player,
-          currentLocation: owner.currentLocation,
-        },
-      });
-    });
-  };
+      this.emit('ownerLocationUpdated', owner);
+    }
+  }
 
-  const spawnTile = (location: AxialCoordinate): Tile => {
+  private spawnEdgeTile(coordinate: AxialCoordinate) {
+    // Only add lines on the one or two sides that face the center
+    const angle = coordinate.toPixel(1).angle();
+    const fractionalSide = (((270 - angle) % 360) / 60) % 6;
+    const sides = approximatelyEqual(fractionalSide, Math.round(fractionalSide))
+      ? [Math.round(fractionalSide) % 6]
+      : [Math.floor(fractionalSide) % 6, Math.ceil(fractionalSide) % 6];
+    const tile: Tile = {
+      id: `t-${this.tiles.length}`,
+      location: coordinate,
+      lines: sides.map(side => ({ fromAnchorId: side * 2, toAnchorId: side * 2 + 1 })),
+      isEdge: true,
+      debug: '',
+    };
+    this.tiles.push(tile);
+    this.emit('tileSpawned', tile);
+  }
+
+  public spawnTile(coordinate: AxialCoordinate) {
     const lines: Line[] = [];
     const anchorIdPool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-    shuffleInPlace(anchorIdPool);
+    this.random.shuffleArrayInPlace(anchorIdPool);
     while (anchorIdPool.length > 0) {
       lines.push({
         fromAnchorId: anchorIdPool.pop() || 0,
@@ -159,131 +155,154 @@ export const hexlines = (game: Game, server: Server) => {
       });
     }
     const tile: Tile = {
-      id: `t-${tiles.length}`,
-      location,
+      id: `t-${this.tiles.length}`,
+      location: coordinate,
       lines,
       isEdge: false,
       debug: '',
     };
-    tiles.push(tile);
-    server.broadcast({
-      type: 'hexlines/tile',
-      payload: {
-        ...tile,
-        location: tile.location.toString(),
-      },
-    });
-    // TODO: allow the current turn player to rotate the tile to their liking
-    owners.forEach((_, ownerIndex) => {
-      // Start with the owner that has the current turn, then loop through remaining owners in order
-      const owner = owners[(turn + ownerIndex) % owners.length];
-      const getNext = (currentLocation: Owner['currentLocation']): { tile: Tile, anchorId: number } | undefined => {
-        if (currentLocation === undefined) {
-          return undefined;
-        }
-        const targetLocation = getNextTargetLocation(currentLocation);
-        const nextTile = tiles.find(tile => tile.location.approximatelyEqual(targetLocation, 0.1));
-        if (nextTile === undefined) {
-          return undefined;
-        }
-        return {
-          tile: nextTile,
-          anchorId: [7, 6, 9, 8, 11, 10, 1, 0, 3, 2, 5, 4][currentLocation.anchorId],
-        };
-      };
-      const finishOwner = (player: string) => {
-        const owner = owners.find(owner => owner.player === player)!;
-        owner.currentLocation = undefined;
-        server.broadcast({
-          type: 'hexlines/owner-location-updated',
-          payload: {
-            player: owner.player,
-            currentLocation: owner.currentLocation,
-          },
-        });
-        // TODO: if all owners are now finished, game ends
-      };
-      let next = getNext(owner.currentLocation);
-      while (next !== undefined) {
-        const nextLineIndex = next.tile.lines.findIndex(line => line.toAnchorId === next?.anchorId || line.fromAnchorId === next?.anchorId)!;
-        const nextLine = next.tile.lines[nextLineIndex];
-        if (nextLine.owner === undefined) {
+    this.tiles.push(tile);
+    this.emit('tileSpawned', tile);
+  }
+
+  public getNextTargetLocation(location: Location): AxialCoordinate {
+    const fromTile = this.tiles.find(tile => tile.id === location.tileId)!;
+    return fromTile.location.add(AxialCoordinate.Directions[Math.floor(location.anchorId / 2)]);
+  }
+
+  private finishOwner(name: string) {
+    const owner = this.owners.find(owner => owner.name === name)!;
+    owner.location = undefined;
+    this.emit('ownerLocationUpdated', owner);
+    // TODO: if all owners are now finished, game ends
+  }
+
+  private getAnchorDual(location: Location): Location | undefined {
+    const targetLocation = this.getNextTargetLocation(location);
+    const dualTile = this.tiles.find(tile => tile.location.approximatelyEqual(targetLocation, 0.1));
+    if (dualTile === undefined) {
+      return undefined;
+    }
+    return {
+      tileId: dualTile.id,
+      anchorId: [7, 6, 9, 8, 11, 10, 1, 0, 3, 2, 5, 4][location.anchorId],
+    };
+  }
+
+  public updateOwnerPaths(ownerIndexWithPriority: number) {
+    for (let ownerCounter = 0; ownerCounter < this.owners.length; ownerCounter++) {
+      // Start with the owner that has the highest priority, then loop in reverse order through the remaining owners
+      const ownerIndex = (ownerIndexWithPriority - ownerCounter + this.owners.length) % this.owners.length;
+      const owner = this.owners[ownerIndex];
+      let dualLocation = owner.location === undefined ? undefined : this.getAnchorDual(owner.location);
+      while (dualLocation !== undefined) {
+        const dualTile = this.tiles.find(tile => tile.id === dualLocation!.tileId)!;
+        const dualLineIndex = dualTile.lines
+          .findIndex(line => line.toAnchorId === dualLocation?.anchorId || line.fromAnchorId === dualLocation?.anchorId)!;
+        const nextLine = dualTile.lines[dualLineIndex];
+        if (nextLine.ownerName === undefined) {
           // Update owner of line
-          nextLine.owner = owner.player;
-          server.broadcast({ type: 'hexlines/line-owner-updated', payload: { owner: owner.player, tileId: next.tile.id, lineIndex: nextLineIndex } });
+          nextLine.ownerName = owner.name;
+          this.emit('tileLineOwnerUpdated', dualTile, dualLineIndex);
+
           // Add score
-          owner.score += next.tile.isEdge ? 0 : 1;
-          server.broadcast({ type: 'hexlines/score', payload: { owner: owner.player } });
+          owner.score += dualTile.isEdge ? 0 : 1;
+          this.emit('ownerScoreUpdated', owner);
+
           // Update location of owner
-          owner.currentLocation = {
-            tileId: next.tile.id,
-            anchorId: nextLine.fromAnchorId === next.anchorId ? nextLine.toAnchorId : nextLine.fromAnchorId,
+          owner.location = {
+            tileId: dualLocation.tileId,
+            anchorId: nextLine.fromAnchorId === dualLocation.anchorId ? nextLine.toAnchorId : nextLine.fromAnchorId,
           };
-          server.broadcast({
-            type: 'hexlines/owner-location-updated',
-            payload: {
-              player: owner.player,
-              currentLocation: owner.currentLocation,
-            },
-          });
+          this.emit('ownerLocationUpdated', owner);
+
           // Check if moved to start
-          if (next.tile.location.approximatelyEqual(AxialCoordinate.Zero)) {
-            finishOwner(owner.player);
+          if (dualTile.location.approximatelyEqual(AxialCoordinate.Zero)) {
+            this.finishOwner(owner.name);
           }
         } else {
-          finishOwner(owner.player);
-          finishOwner(nextLine.owner);
+          // If moved into line of another owner
+          this.finishOwner(owner.name);
+          this.finishOwner(nextLine.ownerName);
         }
-        next = getNext(owner.currentLocation);
+        dualLocation = owner.location === undefined ? undefined : this.getAnchorDual(owner.location);
       }
-    });
-    return tile;
-  };
+    }
+  }
+}
+
+export const hexlines = (game: Game, server: Server) => {
+  let highestSecond = 0;
+  let turn = -1;
+  let next: AxialCoordinate | undefined = undefined;
+  const hexlinesGame = new HexlinesGame('1234');
+
+  hexlinesGame.on('started', (owners) => server.broadcast({
+    type: 'hexlines/started',
+    payload: owners,
+  }));
+  hexlinesGame.on('tileSpawned', (tile) => server.broadcast({
+    type: 'hexlines/tileSpawned',
+    payload: { ...tile, location: tile.location.toString() },
+  }));
+  hexlinesGame.on('tileLineOwnerUpdated', (tile: Tile, lineIndex: number) => server.broadcast({
+    type: 'hexlines/tileLineOwnerUpdated',
+    payload: { tileId: tile.id, lineIndex, ownerName: tile.lines[lineIndex].ownerName },
+  }));
+  hexlinesGame.on('ownerLocationUpdated', (owner) => server.broadcast({
+    type: 'hexlines/ownerLocationUpdated',
+    payload: { ownerName: owner.name, location: owner.location },
+  }));
+  hexlinesGame.on('ownerScoreUpdated', (owner) => server.broadcast({
+    type: 'hexlines/ownerScoreUpdated',
+    payload: { ownerName: owner.name, score: owner.score },
+  }));
 
   game.on('started', (players) => {
     console.info(`[info] [hexlines] starting game for ${players.length} players`);
-    shuffleInPlace(players);
-    players.forEach(addOwner);
-    AxialCoordinate.circle(AxialCoordinate.Zero, players.length <= 2 ? 4 : 5, true).forEach(spawnEdgeTile);
-    spawnStartTile();
-    let next: AxialCoordinate | undefined = undefined;
-    const intervalId = setInterval(() => {
+    hexlinesGame.start(players);
+  });
+  game.on('tick', (totalElapsedMs: number) => {
+    const totalElapsedSeconds = Math.floor(totalElapsedMs / 1000);
+    if (totalElapsedSeconds > highestSecond) {
+      highestSecond = totalElapsedSeconds;
+      const owners = hexlinesGame.getOwners();
       if (next) {
-        spawnTile(next);
-        server.broadcast({ type: 'hexlines/turn', payload: { owner: '' } });
+        hexlinesGame.spawnTile(next);
+        hexlinesGame.updateOwnerPaths(turn);
+        server.broadcast({ type: 'hexlines/turn', payload: { ownerName: undefined } });
         next = undefined;
         return;
       }
-      let current = owners[turn];
       turn = (turn + 1) % owners.length;
+      let currentOwner = owners[turn];
       let deadPlayerCount = 0;
-      while (current.currentLocation === undefined) {
-        current = owners[turn];
+      while (currentOwner.location === undefined) {
         turn = (turn + 1) % owners.length;
+        currentOwner = owners[turn];
         deadPlayerCount += 1;
-        if (deadPlayerCount >= players.length) {
-          clearInterval(intervalId);
+        if (deadPlayerCount >= owners.length) {
           return;
         }
       }
-      server.broadcast({ type: 'hexlines/turn', payload: { owner: current.player } });
-      next = getNextTargetLocation(current.currentLocation);
-    }, 1500);
+      server.broadcast({ type: 'hexlines/turn', payload: { ownerName: currentOwner.name } });
+      next = hexlinesGame.getNextTargetLocation(currentOwner.location);
+    }
   });
-
   game.on('relinked', (player) => {
-    owners.forEach(owner => {
-      server.send(player, { type: 'hexlines/owner', payload: owner });
+    server.send(player, {
+      type: 'hexlines/started',
+      payload: hexlinesGame.getOwners(),
     });
-    tiles.forEach(tile => {
-      server.send(player, { type: 'hexlines/tile', payload: {
-        ...tile,
-        location: tile.location.toString(),
-      } });
-    });
-    server.send(player, { type: 'hexlines/turn', payload: { owner: owners[turn].player } });
+    hexlinesGame.getTiles().forEach(tile => server.send(player, {
+      type: 'hexlines/tileSpawned',
+      payload: { ...tile, location: tile.location.toString() },
+    }));
+    if (turn !== undefined) {
+      const owner = hexlinesGame.getOwners()[turn];
+      server.send(player, { type: 'hexlines/turn', payload: { ownerName: owner.name } });
+    }
   });
-
   game.on('message', (player, message) => {
     console.debug(`[info] [hexlines] ${player} sent ${message.type}`);
   });
