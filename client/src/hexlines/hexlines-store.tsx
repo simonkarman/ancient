@@ -26,20 +26,27 @@ interface Tile {
   debug: string;
 }
 
+interface Turn {
+  ownerName: string;
+  location: string;
+  lines: Line[];
+  rotation: number;
+}
+
 export const hexlinesSlice = createSlice({
   name: 'hexlines',
   initialState: {
     self: '',
     owners: {} as { [player: string]: Owner },
     tiles: {} as { [tileId: string]: Tile },
-    turn: '' as (string | undefined),
+    turn: undefined as (Turn | undefined),
   },
   reducers: {
     reset: (state, action: PayloadAction<{ self: string }>) => {
       state.self = action.payload.self;
       state.owners = {};
       state.tiles = {};
-      state.turn = '';
+      state.turn = undefined;
     },
     started: (state, action: PayloadAction<Owner[]>) => {
       for (let i = 0; i < action.payload.length; i++) {
@@ -59,8 +66,13 @@ export const hexlinesSlice = createSlice({
     ownerScoreUpdated: (state, action: PayloadAction<{ ownerName: string, score: number }>) => {
       state.owners[action.payload.ownerName].score = action.payload.score;
     },
-    turn: (state, action: PayloadAction<{ ownerName: string | undefined }>) => {
-      state.turn = action.payload.ownerName;
+    turn: (state, action: PayloadAction<Turn | undefined>) => {
+      state.turn = action.payload;
+    },
+    turnRotation: (state, action: PayloadAction<number>) => {
+      if (state.turn !== undefined) {
+        state.turn.rotation = action.payload;
+      }
     },
   },
 });

@@ -40,6 +40,12 @@ interface Owner {
   location?: Location
 }
 
+interface Turn {
+  ownerIndex: number;
+  lines: Line[];
+  rotation: number;
+}
+
 type HexlinesGameEvents = {
   started: [owners: Owner[]];
   tileSpawned: [tile: Tile];
@@ -144,7 +150,7 @@ class HexlinesGame extends EventGenerator<HexlinesGameEvents> {
     this.emit('tileSpawned', tile);
   }
 
-  public spawnTile(coordinate: AxialCoordinate) {
+  public createRandomTileLines(): Line[] {
     const lines: Line[] = [];
     const anchorIdPool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     this.random.shuffleArrayInPlace(anchorIdPool);
@@ -153,6 +159,18 @@ class HexlinesGame extends EventGenerator<HexlinesGameEvents> {
         fromAnchorId: anchorIdPool.pop() || 0,
         toAnchorId: anchorIdPool.pop() || 0,
       });
+    }
+    return lines;
+  }
+
+  public spawnTile(coordinate: AxialCoordinate, lines: Line[], rotation: number) {
+    while (rotation < 0) {
+      rotation += 6;
+    }
+    rotation %= 6;
+    for (let i = 0; i < lines.length; i++) {
+      lines[i].fromAnchorId = (lines[i].fromAnchorId + (rotation * 2)) % 12;
+      lines[i].toAnchorId = (lines[i].toAnchorId + (rotation * 2)) % 12;
     }
     const tile: Tile = {
       id: `t-${this.tiles.length}`,
@@ -232,10 +250,35 @@ class HexlinesGame extends EventGenerator<HexlinesGameEvents> {
 }
 
 export const hexlines = (game: Game, server: Server) => {
-  let highestSecond = 0;
-  let turn = -1;
-  let next: AxialCoordinate | undefined = undefined;
+  let turn: Turn | undefined = undefined;
   const hexlinesGame = new HexlinesGame('1234');
+
+  const setTurnTo = (ownerIndex?: number) => {
+    if (ownerIndex === undefined) {
+      turn = undefined;
+      server.broadcast({ type: 'hexlines/turn', payload: undefined });
+    } else {
+      const owner = hexlinesGame.getOwners()[ownerIndex];
+      if (owner.location === undefined) {
+        setTurnTo(undefined);
+      } else {
+        turn = {
+          ownerIndex,
+          lines: hexlinesGame.createRandomTileLines(),
+          rotation: 0,
+        };
+        server.broadcast({
+          type: 'hexlines/turn',
+          payload: {
+            ownerName: owner.name,
+            location: hexlinesGame.getNextTargetLocation(owner.location).toString(),
+            lines: turn.lines,
+            rotation: turn.rotation,
+          },
+        });
+      }
+    }
+  };
 
   hexlinesGame.on('started', (owners) => server.broadcast({
     type: 'hexlines/started',
@@ -261,33 +304,7 @@ export const hexlines = (game: Game, server: Server) => {
   game.on('started', (players) => {
     console.info(`[info] [hexlines] starting game for ${players.length} players`);
     hexlinesGame.start(players);
-  });
-  game.on('tick', (totalElapsedMs: number) => {
-    const totalElapsedSeconds = Math.floor(totalElapsedMs / 1000);
-    if (totalElapsedSeconds > highestSecond) {
-      highestSecond = totalElapsedSeconds;
-      const owners = hexlinesGame.getOwners();
-      if (next) {
-        hexlinesGame.spawnTile(next);
-        hexlinesGame.updateOwnerPaths(turn);
-        server.broadcast({ type: 'hexlines/turn', payload: { ownerName: undefined } });
-        next = undefined;
-        return;
-      }
-      turn = (turn + 1) % owners.length;
-      let currentOwner = owners[turn];
-      let deadPlayerCount = 0;
-      while (currentOwner.location === undefined) {
-        turn = (turn + 1) % owners.length;
-        currentOwner = owners[turn];
-        deadPlayerCount += 1;
-        if (deadPlayerCount >= owners.length) {
-          return;
-        }
-      }
-      server.broadcast({ type: 'hexlines/turn', payload: { ownerName: currentOwner.name } });
-      next = hexlinesGame.getNextTargetLocation(currentOwner.location);
-    }
+    setTurnTo(0);
   });
   game.on('relinked', (player) => {
     server.send(player, {
@@ -298,12 +315,52 @@ export const hexlines = (game: Game, server: Server) => {
       type: 'hexlines/tileSpawned',
       payload: { ...tile, location: tile.location.toString() },
     }));
-    if (turn !== undefined) {
-      const owner = hexlinesGame.getOwners()[turn];
-      server.send(player, { type: 'hexlines/turn', payload: { ownerName: owner.name } });
+    if (turn === undefined) {
+      server.send(player, { type: 'hexlines/turn', payload: undefined });
+    } else {
+      const owner = hexlinesGame.getOwners()[turn.ownerIndex];
+      if (owner.location === undefined) {
+        server.send(player, { type: 'hexlines/turn', payload: undefined });
+      } else {
+        server.send(player, {
+          type: 'hexlines/turn', payload: {
+            ownerName: owner.name,
+            location: hexlinesGame.getNextTargetLocation(owner.location).toString(),
+            lines: turn.lines,
+            rotation: turn.rotation,
+          },
+        });
+        server.send(player, { type: 'hexlines/rotation', payload: turn.rotation });
+      }
     }
   });
   game.on('message', (player, message) => {
     console.debug(`[info] [hexlines] ${player} sent ${message.type}`);
+    const owners = hexlinesGame.getOwners();
+    if (turn !== undefined && owners[turn.ownerIndex].name === player) {
+      const owner = owners[turn.ownerIndex];
+      if (owner.location !== undefined) {
+        switch (message.type) {
+        case 'hexlines/rotateClockwise':
+          turn.rotation += 1;
+          server.broadcast({ type: 'hexlines/turnRotation', payload: turn.rotation });
+          break;
+        case 'hexlines/rotateCounterClockwise':
+          turn.rotation -= 1;
+          server.broadcast({ type: 'hexlines/turnRotation', payload: turn.rotation });
+          break;
+        case 'hexlines/place':
+          // TODO: if not placed within 15 seconds, then place anyway
+          hexlinesGame.spawnTile(hexlinesGame.getNextTargetLocation(owner.location), turn.lines, turn.rotation);
+          // TODO: first switch to an undefined turn to just show the just place tile
+          // TODO: wait a bit before coloring paths
+          // TODO: make every path update be 100 ms in between (and slowly go faster)
+          hexlinesGame.updateOwnerPaths(turn.ownerIndex);
+          // TODO: if switched to a player without a turn, then switch again (unless no player left)
+          setTurnTo((turn.ownerIndex + 1) % owners.length);
+          break;
+        }
+      }
+    }
   });
 };
