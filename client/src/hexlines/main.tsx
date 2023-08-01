@@ -102,14 +102,14 @@ const Tile = (props: {
   </g>);
 };
 
-const Turn = (props: {gridSize: number, tileSize: number }) => {
+const Turn = (props: {gridSize: number, tileSize: number, svgSize: Vector2 }) => {
   const { send } = useKrmx();
   const self = useAppSelector(state => state.hexlines.self);
   const turn = useAppSelector(state => state.hexlines.turn);
+  const owners = useAppSelector(state => state.hexlines.owners);
   if (turn === undefined) {
     return <></>;
   }
-  const pixel = AxialCoordinate.fromString(turn.location).toPixel(props.gridSize);
   return <>
     <Tile
       key={'t-placing'}
@@ -121,24 +121,24 @@ const Turn = (props: {gridSize: number, tileSize: number }) => {
       debug={''}
       rotation={turn.rotation}
     />
-    {turn.ownerName === self && <g transform={`translate(${new Vector2(pixel.x, -pixel.y).toSvgString()})`}>
-      {[
-        { text: '↻', action: 'hexlines/rotateClockwise', x: -15 },
-        { text: 'v', action: 'hexlines/place', x: 0 },
-        { text: '↺', action: 'hexlines/rotateCounterClockwise', x: 15 },
-      ].map(rotate => {
-        return <text
-          key={rotate.text}
-          dominantBaseline='middle'
-          textAnchor='middle'
-          className='text-xl'
-          x={rotate.x}
-          onClick={() => send({ type: rotate.action })}
-        >
-          {rotate.text}
-        </text>;
-      })}
-    </g>}
+    {turn.ownerName === self && [
+      { text: '↻', action: 'hexlines/rotateClockwise', x: -props.svgSize.x * 0.44 },
+      { text: '↓', action: 'hexlines/place', x: 0 },
+      { text: '↺', action: 'hexlines/rotateCounterClockwise', x: props.svgSize.x * 0.44 },
+    ].map(rotate => {
+      return <text
+        key={rotate.text}
+        dominantBaseline='middle'
+        textAnchor='middle'
+        fill={owners[self].color}
+        className='animate-pulse cursor-pointer text-6xl font-bold md:text-4xl'
+        x={rotate.x}
+        y={props.tileSize * 0.09}
+        onClick={() => send({ type: rotate.action })}
+      >
+        {rotate.text}
+      </text>;
+    })}
   </>;
 };
 
@@ -148,8 +148,8 @@ export const Hexlines = () => {
   const turn = useAppSelector(state => state.hexlines.turn);
   const numberOfHexesY = owners.length <= 2 ? 7 : 9;
   const gridSize = 40;
-  const tileSize = 38.5;
-  const svgSize = { x: gridSize * (numberOfHexesY - 2) * 2, y: gridSize * (numberOfHexesY - 2) * 2 };
+  const tileSize = gridSize - 1.5;
+  const svgSize = new Vector2(1, 1).multiply(gridSize * (numberOfHexesY - 2) * 2);
   return <>
     <svg
       className='mb-1 max-h-[75vh] w-full'
@@ -173,7 +173,7 @@ export const Hexlines = () => {
         </radialGradient>
       </defs>
       <circle r={svgSize.y * (owners.length <= 2 ? 0.62 : 0.58)} fill={'url(#edge-mask-gradient)'} />
-      <Turn gridSize={gridSize} tileSize={tileSize} />
+      <Turn gridSize={gridSize} tileSize={tileSize} svgSize={svgSize} />
       {owners.map(([player, owner]) => {
         if (owner.location === undefined) {
           return <></>;
@@ -191,19 +191,19 @@ export const Hexlines = () => {
         />;
       })}
     </svg>
-    <ul className='flex justify-around gap-4'>
+    <ul className='flex justify-around md:gap-4'>
       {owners.map(([player, owner]) => <li
         key={player}
-        className='flex border-4 text-4xl font-bold'
+        className='flex border-2 text-lg font-bold md:border-4 md:text-4xl'
         style={{
           borderColor: owner.name === turn?.ownerName ? 'white' : owner.color,
           backgroundColor: owner.name === turn?.ownerName ? owner.color : 'transparent',
           color: owner.name === turn?.ownerName ? 'white' : owner.color,
-          letterSpacing: '3px',
+          letterSpacing: '1px',
         }}
       >
         <p
-          className={`border-r-4 px-4 py-3 text-center ${owner.location === undefined ? 'line-through' : ''}`}
+          className={`border-r-2 px-2 py-1 text-center md:border-r-4 md:px-4 md:py-2 ${owner.location === undefined ? 'line-through' : ''}`}
           style={{
             borderColor: owner.name === turn?.ownerName ? 'white' : owner.color,
             textDecorationThickness: '0.4rem',
@@ -211,7 +211,7 @@ export const Hexlines = () => {
         >
           {owner.name}
         </p>
-        <p className='px-6 py-3'>
+        <p className='px-3 py-1 md:px-6 md:py-2'>
           {owner.score}
         </p>
       </li>)}

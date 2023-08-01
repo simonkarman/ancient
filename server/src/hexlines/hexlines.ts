@@ -253,14 +253,15 @@ export const hexlines = (game: Game, server: Server) => {
   let turn: Turn | undefined = undefined;
   const hexlinesGame = new HexlinesGame('1234');
 
-  const setTurnTo = (ownerIndex?: number) => {
+  const setTurnTo = (ownerIndex?: number): boolean => {
     if (ownerIndex === undefined) {
       turn = undefined;
       server.broadcast({ type: 'hexlines/turn', payload: undefined });
+      return false;
     } else {
       const owner = hexlinesGame.getOwners()[ownerIndex];
       if (owner.location === undefined) {
-        setTurnTo(undefined);
+        return setTurnTo(undefined);
       } else {
         turn = {
           ownerIndex,
@@ -276,6 +277,8 @@ export const hexlines = (game: Game, server: Server) => {
             rotation: turn.rotation,
           },
         });
+        // TODO: if turn does not finish within 15 seconds, then place anyway
+        return true;
       }
     }
   };
@@ -334,6 +337,32 @@ export const hexlines = (game: Game, server: Server) => {
       }
     }
   });
+  const place = () => {
+    if (turn === undefined) {
+      return;
+    }
+    const owners = hexlinesGame.getOwners();
+    const owner = owners[turn.ownerIndex];
+    if (owner.location === undefined) {
+      return;
+    }
+    hexlinesGame.spawnTile(hexlinesGame.getNextTargetLocation(owner.location), turn.lines, turn.rotation);
+    // TODO: first switch to an undefined turn to just show the just place tile
+    // setTurnTo();
+    // TODO: wait a bit before coloring paths
+    // TODO: make every path update be 100 ms in between (and slowly go faster)
+    hexlinesGame.updateOwnerPaths(turn.ownerIndex);
+    // TODO: if switched to a player without a turn, then switch again (unless no player left)
+    let ownerIndexOffset = 0;
+    const ownerIndexFrom = turn.ownerIndex;
+    do {
+      ownerIndexOffset += 1;
+      if (ownerIndexOffset > owners.length) {
+        console.info('[info] [hexlines] game finished as all players are done');
+        break;
+      }
+    } while (!setTurnTo((ownerIndexFrom + ownerIndexOffset) % owners.length));
+  };
   game.on('message', (player, message) => {
     console.debug(`[info] [hexlines] ${player} sent ${message.type}`);
     const owners = hexlinesGame.getOwners();
@@ -350,14 +379,7 @@ export const hexlines = (game: Game, server: Server) => {
           server.broadcast({ type: 'hexlines/turnRotation', payload: turn.rotation });
           break;
         case 'hexlines/place':
-          // TODO: if not placed within 15 seconds, then place anyway
-          hexlinesGame.spawnTile(hexlinesGame.getNextTargetLocation(owner.location), turn.lines, turn.rotation);
-          // TODO: first switch to an undefined turn to just show the just place tile
-          // TODO: wait a bit before coloring paths
-          // TODO: make every path update be 100 ms in between (and slowly go faster)
-          hexlinesGame.updateOwnerPaths(turn.ownerIndex);
-          // TODO: if switched to a player without a turn, then switch again (unless no player left)
-          setTurnTo((turn.ownerIndex + 1) % owners.length);
+          place();
           break;
         }
       }

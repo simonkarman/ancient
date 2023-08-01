@@ -117,7 +117,7 @@ export function Game() {
       </button>
     </>;
   };
-  const Finished = () => {
+  const Abandoned = () => {
     return <>
       <h2 className='text-lg'>Finished</h2>
       <p className='mb-4'>The game has concluded, you can now leave the server.</p>
@@ -142,7 +142,7 @@ export function Game() {
         {phase === 'lobby' && <Lobby />}
         {phase === 'started' && <Game />}
         {phase === 'paused' && <Paused />}
-        {phase === 'finished' && <Finished />}
+        {phase === 'abandoned' && <Abandoned />}
       </div>
     </div>
     {phase !== 'started' &&

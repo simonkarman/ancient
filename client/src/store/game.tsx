@@ -4,7 +4,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 export const gameSlice = createSlice({
   name: 'game',
   initialState: {
-    phase: 'lobby' as ('lobby' | 'started' | 'paused' | 'finished'),
+    phase: 'lobby' as ('lobby' | 'started' | 'paused' | 'abandoned'),
     config: {
       name: 'none',
       minPlayers: 2,
@@ -34,8 +34,8 @@ export const gameSlice = createSlice({
     resumed: (state) => {
       state.phase = 'started';
     },
-    finished: (state) => {
-      state.phase = 'finished';
+    abandoned: (state) => {
+      state.phase = 'abandoned';
     },
   },
   extraReducers: builder => {
