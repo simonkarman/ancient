@@ -6,12 +6,8 @@
   "homepage": "github.com/simonkarman/ancient",
   "description": "krmx documentation",
   "scripts": {
-    "start": "",
-    "test": "",
-    "precommit": "",
-    "build": "",
-    "lint": "",
-    "prepublishOnly": ""
+    "start": "next",
+    "precommit": "echo 'Nothing here yet...'"
   },
   "dependencies": {
     "next": "^13.4.12",
