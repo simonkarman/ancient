@@ -34,7 +34,7 @@ const gameConfigs: { [gameName: string]: GameConfig | undefined } = {
 
 // Create server
 export const server = createServer({
-  http: { path: 'game', queryParams: { ancient: true, version: '0.0.3' } },
+  http: { path: 'game', queryParams: { ancient: true, version: '0.0.4' } },
   logger: ((severity: LogSeverity, ...args: unknown[]) => {
     if (severity === 'warn' || severity === 'error') {
       console[severity](`[${severity}] [server]`, ...args);
