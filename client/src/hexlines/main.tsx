@@ -1,9 +1,9 @@
 import { useKrmx } from '@krmx/client';
 import React from 'react';
-import { useAppDispatch, useAppSelector } from '../store/store';
+import { useAppSelector } from '../store/store';
 import { AxialCoordinate } from '../utils/AxialCoordinate';
 import { Vector2 } from '../utils/Vector2';
-import { hexlinesSlice, Line } from './hexlines-store';
+import { Line } from './hexlines-store';
 
 const getCornerPosition = (cornerId: number) => Vector2.fromDegrees((cornerId - 2) * 60);
 const getAnchorCorners = (anchorId: number): [Vector2, Vector2] => {
