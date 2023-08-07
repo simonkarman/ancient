@@ -29,7 +29,7 @@ const Header = (props: { reconnect: () => void }) => {
 
 export function App() {
   const [counter, setCounter] = useState(0);
-  const serverUrl = `ws://localhost:8082/game?ancient&version=0.0.4&counter=${counter}`;
+  const serverUrl = `ws://home.simonkarman.com:8082/game?ancient&version=0.0.4&counter=${counter}`;
   const dispatch = useAppDispatch();
   return <div className='flex h-[100dvh] flex-col gap-y-2 pb-2 pt-4'>
     <Header reconnect={() => setCounter(counter + 1)} />

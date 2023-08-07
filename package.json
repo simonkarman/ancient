@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "WebSocket board game by [Simon Karman](https://www.simonkarman.nl)",
   "scripts": {
-    "precommit": "npm run --prefix krmx/server precommit && npm run --prefix krmx/client && npm run --prefix krmx/docs precommit && npm run --prefix server precommit && npm run --prefix client precommit"
+    "precommit": "npm run --prefix server precommit && npm run --prefix client precommit"
   },
   "author": "Simon Karman",
   "license": "ISC",
