@@ -41,51 +41,55 @@ if (gameConfig === undefined) {
 }
 
 const createAncientServer = () => {
-  // Create http server
-  const expressServer = express();
-  expressServer.get('/health', (_, res) => {
-    res.send('Server is running!');
-  });
-  const httpServer = createHttpServer(expressServer);
+  try {
+    // Create http server
+    const expressServer = express();
+    expressServer.get('/health', (_, res) => {
+      res.send('Server is running!');
+    });
+    const httpServer = createHttpServer(expressServer);
 
-  // Create krmx server
-  const krmxServer = createKrmxServer({
-    http: { server: httpServer, path: 'game', queryParams: { ancient: true, version: '0.0.4' } },
-    logger: ((severity: LogSeverity, ...args: unknown[]) => {
-      if (severity === 'warn' || severity === 'error') {
-        console[severity](`[${severity}] [server]`, ...args);
-      }
-    }),
-  });
-  monitorUsers(krmxServer);
-  commands(krmxServer, process.stdin);
+    // Create krmx server
+    const krmxServer = createKrmxServer({
+      http: { server: httpServer, path: 'game', queryParams: { ancient: true, version: '0.0.4' } },
+      logger: ((severity: LogSeverity, ...args: unknown[]) => {
+        if (severity === 'warn' || severity === 'error') {
+          console[severity](`[${severity}] [server]`, ...args);
+        }
+      }),
+    });
+    monitorUsers(krmxServer);
+    commands(krmxServer, process.stdin);
 
-  // Setup game
-  console.info(`[info] Setting up ${gameName} game`);
-  const game = createGame(krmxServer, {
-    log: true,
-    name: gameName,
-    minPlayers: gameConfig.minPlayers,
-    maxPlayers: gameConfig.maxPlayers,
-    tickMs: 100,
-  });
-  gameConfig.setup(game, krmxServer);
+    // Setup game
+    console.info(`[info] Setting up ${gameName} game`);
+    const game = createGame(krmxServer, {
+      log: true,
+      name: gameName,
+      minPlayers: gameConfig.minPlayers,
+      maxPlayers: gameConfig.maxPlayers,
+      tickMs: 100,
+    });
+    gameConfig.setup(game, krmxServer);
 
-  // Start server
-  krmxServer.on('listen', (port) => {
-    console.info('[info] server started on port', port);
-  });
-  krmxServer.on('close', () => {
-    console.info('[info] server has closed');
-    setTimeout(() => {
-      createAncientServer();
-    }, 1000);
-  });
-  expressServer.get('/restart', (_, res) => {
-    console.info('[info] server restart requested');
-    res.send('Server will restart shortly...');
-    krmxServer.close();
-  });
-  krmxServer.listen(8082);
+    // Start server
+    krmxServer.on('listen', (port) => {
+      console.info('[info] ancient server started on port', port);
+    });
+    krmxServer.on('close', () => {
+      console.info('[info] ancient server has closed');
+      setTimeout(() => {
+        createAncientServer();
+      }, 1000);
+    });
+    expressServer.get('/restart', (_, res) => {
+      console.info('[info] ancient server restart was requested');
+      res.send('Server will restart shortly...');
+      krmxServer.close();
+    });
+    krmxServer.listen(8082);
+  } catch (e) {
+    console.error('[error] ancient server has unexpectedly crashed', e);
+  }
 };
 createAncientServer();
