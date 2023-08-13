@@ -1,4 +1,6 @@
-import { createServer, EventEmitter, LogSeverity, Server } from '@krmx/server';
+import { createServer as createHttpServer } from 'http';
+import { createServer as createKrmxServer, EventEmitter, LogSeverity, Server } from '@krmx/server';
+import express from 'express';
 import { ancient } from './ancient/ancient';
 import { cards } from './cards/cards';
 import { createGame, GameEvents } from './game';
@@ -31,38 +33,58 @@ const gameConfigs: { [gameName: string]: GameConfig | undefined } = {
     setup: hexlines,
   },
 };
-
-// Create server
-export const server = createServer({
-  http: { path: 'game', queryParams: { ancient: true, version: '0.0.4' } },
-  logger: ((severity: LogSeverity, ...args: unknown[]) => {
-    if (severity === 'warn' || severity === 'error') {
-      console[severity](`[${severity}] [server]`, ...args);
-    }
-  }),
-});
-monitorUsers(server);
-commands(server, process.stdin);
-
-// Setup game
 // eslint-disable-next-line no-process-env
 const gameName = process.env.GAME_NAME || 'none';
 const gameConfig = gameConfigs[gameName];
 if (gameConfig === undefined) {
   throw new Error(`environment variable GAME_NAME is set to ${gameName} and should be set to ${Object.keys(gameConfigs).join(' or ')}`);
 }
-console.info(`[info] Setting up ${gameName} game`);
-const game = createGame(server, {
-  log: true,
-  name: gameName,
-  minPlayers: gameConfig.minPlayers,
-  maxPlayers: gameConfig.maxPlayers,
-  tickMs: 100,
-});
-gameConfig.setup(game, server);
 
-// Start server
-server.on('listen', (port) => {
-  console.info('[info] server started on port', port);
-});
-server.listen(8082);
+const createAncientServer = () => {
+  // Create http server
+  const expressServer = express();
+  expressServer.get('/health', (_, res) => {
+    res.send('Server is running!');
+  });
+  const httpServer = createHttpServer(expressServer);
+
+  // Create krmx server
+  const krmxServer = createKrmxServer({
+    http: { server: httpServer, path: 'game', queryParams: { ancient: true, version: '0.0.4' } },
+    logger: ((severity: LogSeverity, ...args: unknown[]) => {
+      if (severity === 'warn' || severity === 'error') {
+        console[severity](`[${severity}] [server]`, ...args);
+      }
+    }),
+  });
+  monitorUsers(krmxServer);
+  commands(krmxServer, process.stdin);
+
+  // Setup game
+  console.info(`[info] Setting up ${gameName} game`);
+  const game = createGame(krmxServer, {
+    log: true,
+    name: gameName,
+    minPlayers: gameConfig.minPlayers,
+    maxPlayers: gameConfig.maxPlayers,
+    tickMs: 100,
+  });
+  gameConfig.setup(game, krmxServer);
+
+  // Start server
+  krmxServer.on('listen', (port) => {
+    console.info('[info] server started on port', port);
+  });
+  krmxServer.on('close', () => {
+    console.info('[info] server closed');
+    setTimeout(() => {
+      createAncientServer();
+    }, 1000);
+  });
+  expressServer.get('/restart', (_, res) => {
+    res.send('Server will restart shortly...');
+    krmxServer.close();
+  });
+  krmxServer.listen(8082);
+};
+createAncientServer();
