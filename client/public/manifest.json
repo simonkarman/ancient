@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Ancient",
+  "name": "Ancient - Collection of games build with Krmx",
   "icons": [
     {
       "src": "favicon.ico",

@@ -76,12 +76,13 @@ const createAncientServer = () => {
     console.info('[info] server started on port', port);
   });
   krmxServer.on('close', () => {
-    console.info('[info] server closed');
+    console.info('[info] server has closed');
     setTimeout(() => {
       createAncientServer();
     }, 1000);
   });
   expressServer.get('/restart', (_, res) => {
+    console.info('[info] server restart requested');
     res.send('Server will restart shortly...');
     krmxServer.close();
   });
