@@ -10,13 +10,19 @@ import { gameSlice } from './store/game';
 import { AppState, useAppDispatch, useAppSelector } from './store/store';
 
 export function Game() {
-  const { isConnected, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
+  const { isConnected, reconnect, isLinked, link, leave, send, users, rejectionReason, username } = useKrmx();
   const dispatch = useAppDispatch();
   useEffect(() => {
     if (!isLinked) {
       dispatch(gameSlice.actions.reset());
     }
   }, [dispatch, isConnected, isLinked]);
+  useEffect(() => {
+    const timer = setTimeout(() => reconnect(false), 1000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isConnected]);
   const [joinUsername, setJoinUsername] = useState('');
   const phase = useAppSelector((state: AppState) => state.game.phase);
   const players = useAppSelector((state: AppState) => state.game.players);

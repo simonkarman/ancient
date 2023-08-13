@@ -36,8 +36,6 @@ export const Ancient = () => {
       xmlns='http://www.w3.org/2000/svg'
       className='mt-1 max-h-[75vh] w-full border'
       preserveAspectRatio='xMidYMid meet'
-      // onClick={onClick}
-      // onMouseMove={onMove}
       viewBox={`${-svgSize.x / 2} ${-svgSize.y / 2} ${svgSize.x} ${svgSize.y}`}
     >
       {Object.entries(tiles).map(([tileId, tile]) => {
