@@ -359,6 +359,10 @@ export const hexlines = (game: Game, server: Server) => {
       ownerIndexOffset += 1;
       if (ownerIndexOffset > owners.length) {
         console.info('[info] [hexlines] game finished as all players are done');
+        // Restart the server after a short timeout
+        setTimeout(() => {
+          server.close();
+        }, 30 * 1000);
         break;
       }
     } while (!setTurnTo((ownerIndexFrom + ownerIndexOffset) % owners.length));
