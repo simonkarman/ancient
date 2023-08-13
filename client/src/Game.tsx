@@ -18,7 +18,7 @@ export function Game() {
     }
   }, [dispatch, isConnected, isLinked]);
   useEffect(() => {
-    const timer = setTimeout(() => reconnect(false), 1000);
+    const timer = setTimeout(() => reconnect(), 1000);
     return () => {
       clearTimeout(timer);
     };
